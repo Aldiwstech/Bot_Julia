@@ -1,13 +1,11 @@
 import os
-from io import BytesIO
 import telebot
-from flask import Flask, request
 from PIL import Image, ImageDraw, ImageFont
 import pandas as pd
 
-TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8955027973:AAH1dm2tOBRMf85Pxy0N9MMKM-fw8ekrZnM')
+# Masukkan langsung tokennya di sini agar tidak perlu lewat Environment Variables Railway
+TOKEN = '8955027973:AAH1dm2tOBRMf85Pxy0N9MMKM-fw8ekrZnM'
 bot = telebot.TeleBot(TOKEN)
-server = Flask(__name__)
 
 # --- Fungsionalitas Generator Gambar (Sama seperti sebelumnya) ---
 
