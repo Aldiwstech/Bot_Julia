@@ -3,7 +3,6 @@ import telebot
 from PIL import Image, ImageDraw, ImageFont
 import pandas as pd
 
-# Masukkan langsung tokennya di sini agar tidak perlu lewat Environment Variables Railway
 TOKEN = '8955027973:AAH1dm2tOBRMf85Pxy0N9MMKM-fw8ekrZnM'
 bot = telebot.TeleBot(TOKEN)
 
