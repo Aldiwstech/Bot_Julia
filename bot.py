@@ -6,21 +6,18 @@ import pandas as pd
 TOKEN = '8955027973:AAH1dm2tOBRMf85Pxy0N9MMKM-fw8ekrZnM'
 bot = telebot.TeleBot(TOKEN)
 
-# --- Fungsionalitas Generator Gambar (Sama seperti sebelumnya) ---
-
 
 def generate_site_card(site_id):
   excel_path = 'Excel_master.xlsx'
   if not os.path.exists(excel_path):
     return None
 
-  # Membaca semua sheet untuk mencari Site ID yang cocok
   xls = pd.ExcelFile(excel_path)
   filtered = pd.DataFrame()
+  site_data = None
 
   for sheet_name in xls.sheet_names:
     df = pd.read_excel(excel_path, sheet_name=sheet_name)
-    # Cari kolom yang mirip dengan 'Site ID'
     id_col = None
     for col in df.columns:
       if 'site' in str(col).lower() and 'id' in str(col).lower():
@@ -34,12 +31,9 @@ def generate_site_card(site_id):
         site_data = filtered.iloc[0]
         break
 
-  if filtered.empty:
+  if site_data is None or filtered.empty:
     return None
 
-  # ... (lanjutan kode render gambar seperti sebelumnya)
-
-  site_data = filtered.iloc[0]
   mockup_path = 'Mokup.png'
   if not os.path.exists(mockup_path):
     return None
@@ -63,6 +57,8 @@ def generate_site_card(site_id):
   COLOR_RED = (209, 52, 56)
 
   def val(col, default='-'):
+    if col not in site_data:
+      return default
     v = site_data.get(col)
     return str(v) if pd.notnull(v) and str(v).strip() != '' else default
 
@@ -163,7 +159,7 @@ def generate_site_card(site_id):
       ('🆔', 'Site ID', val('Site ID')),
       ('📍', 'Site Name', val('Site Name')),
       ('🌐', 'Regional', val('Regional')),
-      ('🏢', 'NOP', val('NOP')),
+      ('🏢', 'NOP', val('NOP_1')),
       ('📡', 'TO', val('TO')),
       ('🏠', 'ROH', val('ROH')),
       ('👤', 'Site Owner', val('Site Owner')),
@@ -180,7 +176,7 @@ def generate_site_card(site_id):
       ('📈', 'Load System', val('Load System (1)')),
   ]
 
-  bbt_val = site_data.get('BBT H (1)')
+  bbt_val = site_data.get('BBT H (1)') if 'BBT H (1)' in site_data else None
   bbt_str = (
       f'{round(float(bbt_val), 2)} Hours' if pd.notnull(bbt_val) else '-'
   )
@@ -193,7 +189,11 @@ def generate_site_card(site_id):
       ('📊', 'Category', val('BBT Category (1)')),
   ]
 
-  util_val = site_data.get('Rectifier Utility')
+  util_val = (
+      site_data.get('Rectifier Utility')
+      if 'Rectifier Utility' in site_data
+      else None
+  )
   util_str = (
       f'{round(float(util_val) * 100, 1)} %' if pd.notnull(util_val) else '-'
   )
@@ -250,10 +250,9 @@ def generate_site_card(site_id):
         font=font,
     )
 
-  return img
-
-
-# --- Handler Perintah Telegram ---
+  output_path = f'output_{site_id}.png'
+  img.save(output_path)
+  return output_path
 
 
 @bot.message_handler(commands=['start', 'help'])
@@ -268,52 +267,24 @@ def send_welcome(message):
 def handle_site(message):
   text_parts = message.text.split()
   if len(text_parts) < 2:
-    bot.reply_to(
-        message, 'Format salah! Contoh penggunaan: `/site CJR526`', parse_mode=''
-    )
+    bot.reply_to(message, 'Format salah! Contoh penggunaan: `/site CKR207`')
     return
 
-  site_id = text_parts[1]
-  bot.reply_to(message, f'Sedang memproses Site ID: `{site_id}`...')
+  site_id = text_parts[1].upper()
+  bot.reply_to(message, f'Sedang memproses Site ID: {site_id}...')
 
-  img = generate_site_card(site_id)
-  if img:
-    buf = BytesIO()
-    img.save(buf, format='PNG')
-    buf.seek(0)
-    bot.send_photo(
-        message.chat.id, buf, caption=f'✅ Status untuk Site ID: `{site_id}`'
-    )
+  img_path = generate_site_card(site_id)
+  if img_path and os.path.exists(img_path):
+    with open(img_path, 'rb') as photo:
+      bot.send_photo(
+          message.chat.id, photo, caption=f'✅ Status untuk Site ID: {site_id}'
+      )
+    os.remove(img_path)
   else:
     bot.reply_to(
-        message,
-        f'❌ Maaf, Site ID `{site_id}` tidak ditemukan di database Excel!',
+        message, f'❌ Maaf, Site ID {site_id} tidak ditemukan di database Excel!'
     )
 
 
-# --- Webhook Server untuk Render Free Tier ---
-
-
-@server.route('/' + TOKEN, methods=['POST'])
-def getMessage():
-  json_string = request.get_data().decode('utf-8')
-  update = telebot.types.Update.de_json(json_string)
-  bot.process_new_updates([update])
-  return '!', 200
-
-
-@server.route('/')
-def webhook():
-  bot.remove_webhook()
-  # Ganti URL di bawah dengan URL web service Render Anda nanti setelah jadi
-  # contoh: https://bot-julia.onrender.com/
-  RENDER_URL = (
-      os.environ.get('RENDER_EXTERNAL_URL', 'https://your-app-name.onrender.com')
-      + '/'
-  )
-  bot.set_webhook(url=RENDER_URL + TOKEN)
-  return 'Bot Telegram aktif via Webhook!', 200
-
-
-if __name__ == '__main__':
-  server.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+print('Bot Telegram siap berjalan...')
+bot.infinity_polling()
