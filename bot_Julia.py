@@ -14,7 +14,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Token Bot Telegram Anda (Ambil dari BotFather)
-TELEGRAM_BOT_TOKEN = 'MASUKKAN_TOKEN_BOT_ANDA_DI_SINI'
+TELEGRAM_BOT_TOKEN = '8955027973:AAH1dm2tOBRMf85Pxy0N9MMKM-fw8ekrZnM'
 
 
 def generate_site_card(site_id):
