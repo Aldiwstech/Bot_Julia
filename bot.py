@@ -14,11 +14,30 @@ def generate_site_card(site_id):
   if not os.path.exists(excel_path):
     return None
 
-  df = pd.read_excel(excel_path)
-  filtered = df[df['Site ID'].astype(str).str.upper() == str(site_id).upper()]
+  # Membaca semua sheet untuk mencari Site ID yang cocok
+  xls = pd.ExcelFile(excel_path)
+  filtered = pd.DataFrame()
+
+  for sheet_name in xls.sheet_names:
+    df = pd.read_excel(excel_path, sheet_name=sheet_name)
+    # Cari kolom yang mirip dengan 'Site ID'
+    id_col = None
+    for col in df.columns:
+      if 'site' in str(col).lower() and 'id' in str(col).lower():
+        id_col = col
+        break
+
+    if id_col:
+      df[id_col] = df[id_col].astype(str).str.strip().str.upper()
+      filtered = df[df[id_col] == str(site_id).strip().upper()]
+      if not filtered.empty:
+        site_data = filtered.iloc[0]
+        break
 
   if filtered.empty:
     return None
+
+  # ... (lanjutan kode render gambar seperti sebelumnya)
 
   site_data = filtered.iloc[0]
   mockup_path = 'Mokup.png'
