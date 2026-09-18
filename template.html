@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { 
+            box-sizing: border-box; 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 0; 
+        }
+        
+        body { 
+            width: 1280px; 
+            height: 720px; 
+            /* Memakai Mokup.png milikmu sebagai background utama */
+            background-image: url('Mokup.png'); 
+            background-size: 100% 100%;
+            background-repeat: no-repeat;
+            position: relative;
+            overflow: hidden;
+            color: #1a1a1a;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        /* Area Teks per Box (Posisi Absolute diatas Mokup.png) */
+        .box {
+            position: absolute;
+            top: 150px; /* Jarak dari atas ke box putih */
+        }
+
+        /* Box 1: SITE INFO (Kiri) */
+        .box-site-info {
+            left: 50px;
+            width: 320px;
+        }
+
+        /* Box 2: RECTIFIER & PLN (Tengah Atas) */
+        .box-rectifier {
+            left: 420px;
+            width: 380px;
+        }
+
+        /* Box 3: BATTERY STATUS (Tengah Bawah) */
+        .box-battery {
+            left: 420px;
+            top: 410px;
+            width: 380px;
+        }
+
+        /* Box 4: HEALTHY CHECK & ACTION (Kanan) */
+        .box-action {
+            left: 840px;
+            width: 390px;
+        }
+
+        /* Styling Baris Data */
+        .row {
+            display: flex;
+            margin-bottom: 6px;
+        }
+        .label {
+            width: 140px;
+            font-weight: bold;
+            color: #333;
+        }
+        .colon {
+            width: 15px;
+            font-weight: bold;
+        }
+        .value {
+            flex: 1;
+            font-weight: 600;
+            color: #000;
+        }
+
+        .highlight-red {
+            color: #cc0000;
+            font-weight: bold;
+        }
+        .section-title {
+            font-weight: bold;
+            margin-top: 12px;
+            margin-bottom: 4px;
+            color: #001a4d;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- BOX 1: SITE INFO -->
+    <div class="box box-site-info">
+        <div class="row"><span class="label">Site ID</span><span class="colon">:</span><span class="value">{{ site_id }}</span></div>
+        <div class="row"><span class="label">Site Name</span><span class="colon">:</span><span class="value">{{ site_name }}</span></div>
+        <div class="row"><span class="label">Regional</span><span class="colon">:</span><span class="value">{{ regional }}</span></div>
+        <div class="row"><span class="label">NOP</span><span class="colon">:</span><span class="value">{{ nop }}</span></div>
+        <div class="row"><span class="label">Class Site</span><span class="colon">:</span><span class="value">{{ class_site }}</span></div>
+        <div class="row"><span class="label">VIP Status</span><span class="colon">:</span><span class="value">{{ vip_status }}</span></div>
+        <div class="row"><span class="label">Site Owner</span><span class="colon">:</span><span class="value">{{ site_owner }}</span></div>
+        <div class="row"><span class="label">Lat / Long</span><span class="colon">:</span><span class="value">{{ lat }} / {{ long }}</span></div>
+    </div>
+
+    <!-- BOX 2: RECTIFIER & PLN -->
+    <div class="box box-rectifier">
+        <div class="row"><span class="label">ID PLN</span><span class="colon">:</span><span class="value">{{ id_pln }}</span></div>
+        <div class="row"><span class="label">Daya PLN</span><span class="colon">:</span><span class="value highlight-red">{{ daya_pln }} kVA | {{ phase }} Phase</span></div>
+        <div class="row"><span class="label">Brand</span><span class="colon">:</span><span class="value">{{ rect_brand }}</span></div>
+        <div class="row"><span class="label">Model</span><span class="colon">:</span><span class="value">{{ rect_model }}</span></div>
+        <div class="row"><span class="label">Capacity</span><span class="colon">:</span><span class="value">{{ cap_module }} W | {{ mod_qty }} Module</span></div>
+        <div class="row"><span class="label">Load System</span><span class="colon">:</span><span class="value">{{ load_sys }} A</span></div>
+    </div>
+
+    <!-- BOX 3: BATTERY STATUS -->
+    <div class="box box-battery">
+        <div class="row"><span class="label">Brand</span><span class="colon">:</span><span class="value">{{ batt_brand }} ({{ batt_type }})</span></div>
+        <div class="row"><span class="label">Capacity</span><span class="colon">:</span><span class="value">{{ batt_cap }} Ah | {{ batt_bank }} Bank</span></div>
+        <div class="row"><span class="label">BBT Backup</span><span class="colon">:</span><span class="value">{{ bbt_hours }} Hours</span></div>
+        <div class="row"><span class="label">Category</span><span class="colon">:</span><span class="value">{{ bbt_category }}</span></div>
+    </div>
+
+    <!-- BOX 4: HEALTHY CHECK & ACTION -->
+    <div class="box box-action">
+        <div class="row"><span class="label">Rectifier Cond.</span><span class="colon">:</span><span class="value">{{ rect_cond }}</span></div>
+        <div class="row"><span class="label">Utility</span><span class="colon">:</span><span class="value">{{ rect_utility }} %</span></div>
+        <div class="row"><span class="label">Config</span><span class="colon">:</span><span class="value">{{ rect_config }}</span></div>
+        <div class="row"><span class="label">Capacity Status</span><span class="colon">:</span><span class="value">{{ cap_status }}</span></div>
+        <div class="row"><span class="label">Genset Status</span><span class="colon">:</span><span class="value">{{ genset_status }}</span></div>
+
+        <div class="section-title">SOW Activity :</div>
+        <div style="padding-left: 10px; font-weight: 600;">{{ sow_activity }}</div>
+
+        <div style="margin-top: 15px;">
+            <div class="row"><span class="label">EAS Validation</span><span class="colon">:</span><span class="value">{{ eas_val }}</span></div>
+            <div class="row"><span class="label">NetEco Status</span><span class="colon">:</span><span class="value">{{ neteco_status }}</span></div>
+        </div>
+    </div>
+
+</body>
+</html>

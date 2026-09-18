@@ -1,0 +1,4 @@
+pandas
+pillow
+python-telegram-bot
+openpyxl
