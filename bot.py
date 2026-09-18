@@ -3,7 +3,7 @@ import telebot
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 
-TOKEN = 'MASUKKAN_TOKEN_BOT_ANDA_DI_SINI'
+TOKEN = '8525438495:AAHFiM1MEs8p-oJBiPlUg2AjZWzr_eH5c6I'
 bot = telebot.TeleBot(TOKEN)
 
 def generate_site_card(site_id):
