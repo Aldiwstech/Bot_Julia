@@ -263,28 +263,24 @@ def send_welcome(message):
   )
 
 
+import os
+# ... (import library lain)
+
 @bot.message_handler(commands=['site'])
 def handle_site(message):
-  text_parts = message.text.split()
-  if len(text_parts) < 2:
-    bot.reply_to(message, 'Format salah! Contoh penggunaan: `/site CKR207`')
-    return
-
-  site_id = text_parts[1].upper()
-  bot.reply_to(message, f'Sedang memproses Site ID: {site_id}...')
+  # ... (proses generate site_id)
 
   img_path = generate_site_card(site_id)
   if img_path and os.path.exists(img_path):
-    with open(img_path, 'rb') as photo:
-      bot.send_photo(
-          message.chat.id, photo, caption=f'✅ Status untuk Site ID: {site_id}'
-      )
+    # Gunakan send_document agar file asli terkirim tanpa kompresi
+    with open(img_path, 'rb') as photo_file:
+        bot.send_document(
+            message.chat.id, 
+            photo_file, 
+            caption=f'✅ Status untuk Site ID: {site_id} (Resolusi Penuh)'
+        )
     os.remove(img_path)
   else:
     bot.reply_to(
         message, f'❌ Maaf, Site ID {site_id} tidak ditemukan di database Excel!'
     )
-
-
-print('Bot Telegram siap berjalan...')
-bot.infinity_polling()
