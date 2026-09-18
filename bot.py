@@ -3,6 +3,7 @@ import telebot
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 
+# Token bot Anda sudah dimasukkan di sini
 TOKEN = '8525438495:AAHFiM1MEs8p-oJBiPlUg2AjZWzr_eH5c6I'
 bot = telebot.TeleBot(TOKEN)
 
@@ -40,7 +41,7 @@ def generate_site_card(site_id):
   img = Image.open(mockup_path).convert('RGB')
   draw = ImageDraw.Draw(img)
 
-  # GUNAKAN FONT DEJAVUSANS.TTF YANG DI-UPLOAD KE GITHUB
+  # MENGGUNAKAN FONT DEJAVUSANS.TTF YANG DI-UPLOAD KE GITHUB
   font_size = 24
   font_path = 'DejaVuSans.ttf'
   
@@ -100,7 +101,6 @@ def generate_site_card(site_id):
     if not action_list:
       action_list = ['NORMAL']
 
-  # KOORDINAT & SPASI YANG PAS
   site_cfg = {'start_x': 45, 'start_y': 225, 'colon_x': 200, 'val_x': 215, 'spacing': 42}
   rect_cfg = {'start_x': 540, 'start_y': 225, 'colon_x': 740, 'val_x': 765, 'spacing': 42}
   batt_cfg = {'start_x': 540, 'start_y': 625, 'colon_x': 740, 'val_x': 765, 'spacing': 42}
