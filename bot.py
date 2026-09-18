@@ -3,13 +3,11 @@ import telebot
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 
-# AMBIL TOKEN LANGSUNG DARI RAILWAY VARIABELS (AMAN DARI ERROR COLON)
 TOKEN = os.getenv('TOKEN')
 if not TOKEN:
   raise ValueError("Token belum diset di Environment Variables Railway!")
   
 bot = telebot.TeleBot(TOKEN)
-
 
 def generate_site_card(site_id):
   excel_path = 'Excel_master.xlsx'
@@ -45,7 +43,8 @@ def generate_site_card(site_id):
   img = Image.open(mockup_path).convert('RGB')
   draw = ImageDraw.Draw(img)
 
-  font_size = 24
+  # UKURAN FONT DINAIKKAN JADI 40 SUPAYA JELAS DAN BESAR
+  font_size = 40
   font_path = 'DejaVuSans.ttf'
   
   try:
@@ -104,10 +103,11 @@ def generate_site_card(site_id):
     if not action_list:
       action_list = ['NORMAL']
 
-  site_cfg = {'start_x': 45, 'start_y': 225, 'colon_x': 200, 'val_x': 215, 'spacing': 42}
-  rect_cfg = {'start_x': 540, 'start_y': 225, 'colon_x': 740, 'val_x': 765, 'spacing': 42}
-  batt_cfg = {'start_x': 540, 'start_y': 625, 'colon_x': 740, 'val_x': 765, 'spacing': 42}
-  health_cfg = {'start_x': 1020, 'start_y': 225, 'colon_x': 1220, 'val_x': 1245, 'spacing': 37}
+  # KOORDINAT DIKOREKSI SUPAYA PAS DI DALAM KOTAK MOCKUP & JARAK ANTAR BARIS AMAN
+  site_cfg = {'start_x': 60, 'start_y': 240, 'label_x': 110, 'colon_x': 380, 'val_x': 410, 'spacing': 55}
+  rect_cfg = {'start_x': 560, 'start_y': 240, 'label_x': 610, 'colon_x': 880, 'val_x': 910, 'spacing': 55}
+  batt_cfg = {'start_x': 560, 'start_y': 670, 'label_x': 610, 'colon_x': 880, 'val_x': 910, 'spacing': 55}
+  health_cfg = {'start_x': 1060, 'start_y': 240, 'label_x': 1110, 'colon_x': 1380, 'val_x': 1410, 'spacing': 48}
 
   def render_box(cfg, items):
     y = cfg['start_y']
@@ -116,57 +116,61 @@ def generate_site_card(site_id):
       if label == '':
         y += int(spacing * 0.4)
         continue
+      # Render ikon / nomor list kecil di sebelah kiri
       draw.text((cfg['start_x'], y), emoji, fill=COLOR_TEXT, font=font)
-      draw.text((cfg['start_x'] + 38, y), label, fill=COLOR_LABEL, font=font)
+      # Render Label teks
+      draw.text((cfg['label_x'], y), label, fill=COLOR_LABEL, font=font)
+      # Titik dua
       draw.text((cfg['colon_x'], y), ':', fill=COLOR_TEXT, font=font)
+      # Nilai dari Excel
       val_color = get_dynamic_color(value)
       draw.text((cfg['val_x'], y), f' {value}', fill=val_color, font=font)
       y += spacing
 
   col_site = [
-      ('🆔', 'Site ID', val('Site ID')),
-      ('📍', 'Site Name', val('Site Name')),
-      ('🌐', 'Regional', val('Regional')),
-      ('🏢', 'NOP', val('NOP_1')),
-      ('📡', 'TO', val('TO')),
-      ('🏠', 'ROH', val('ROH')),
-      ('👤', 'Site Owner', val('Site Owner')),
-      ('🧭', 'Lat / Long', f"{val('Lat')} / {val('Long')}"),
+      ('-', 'Site ID', val('Site ID')),
+      ('-', 'Site Name', val('Site Name')),
+      ('-', 'Regional', val('Regional')),
+      ('-', 'NOP', val('NOP_1')),
+      ('-', 'TO', val('TO')),
+      ('-', 'ROH', val('ROH')),
+      ('-', 'Site Owner', val('Site Owner')),
+      ('-', 'Lat / Long', f"{val('Lat')} / {val('Long')}"),
   ]
 
   col_rect = [
-      ('⚡', 'ID PLN', val('ID PLN')),
-      ('💡', 'Daya PLN', f"{val('Daya PLN (KVA)')} kVA"),
-      ('🔌', 'Brand', val('Rectifier Brand (1)')),
-      ('⚙️', 'Model', val('Rectifier Model (1)')),
-      ('🔋', 'Capacity', val('Module Capacity (1)')),
-      ('📦', 'Module Qty', val('Inserted Module Qty (1)')),
-      ('📈', 'Load System', val('Load System (1)')),
+      ('-', 'ID PLN', val('ID PLN')),
+      ('-', 'Daya PLN', f"{val('Daya PLN (KVA)')} kVA"),
+      ('-', 'Brand', val('Rectifier Brand (1)')),
+      ('-', 'Model', val('Rectifier Model (1)')),
+      ('-', 'Capacity', val('Module Capacity (1)')),
+      ('-', 'Module Qty', val('Inserted Module Qty (1)')),
+      ('-', 'Load System', val('Load System (1)')),
   ]
 
   bbt_val = site_data.get('BBT H (1)') if 'BBT H (1)' in site_data else None
   bbt_str = f'{round(float(bbt_val), 2)} Hours' if pd.notnull(bbt_val) and str(bbt_val).replace('.','',1).isdigit() else '-'
   col_batt = [
-      ('🔋', 'Brand', val('Battery Brand (1)')),
-      ('🧪', 'Type', val('Battery Type (1)')),
-      ('⚡', 'Capacity', val('Battery Capacity (1)')),
-      ('📦', 'Bank Qty', val('Battery Bank (1)')),
-      ('⏱️', 'BBT Backup', bbt_str),
-      ('📊', 'Category', val('BBT Category (1)')),
+      ('-', 'Brand', val('Battery Brand (1)')),
+      ('-', 'Type', val('Battery Type (1)')),
+      ('-', 'Capacity', val('Battery Capacity (1)')),
+      ('-', 'Bank Qty', val('Battery Bank (1)')),
+      ('-', 'BBT Backup', bbt_str),
+      ('-', 'Category', val('BBT Category (1)')),
   ]
 
   util_val = site_data.get('Rectifier Utility') if 'Rectifier Utility' in site_data else None
   util_str = f'{round(float(util_val) * 100, 1)} %' if pd.notnull(util_val) and str(util_val).replace('.','',1).isdigit() else '-'
 
   col_health = [
-      ('🔧', 'Rect. Cond', val('Rectifier Condition')),
-      ('📊', 'Utility', util_str),
-      ('🔒', 'Config', val('Rectifier Config (Category)')),
-      ('✔️', 'Cap. Status', val('Capacity Status')),
-      ('⚠️', 'Pot. Trip', val('Potensial Trip')),
-      ('📋', 'SOW Act.', val('Activity (SOW) Actual')),
-      ('✅', 'EAS Valid.', val('EAS Validation')),
-      ('🌐', 'NETECO Stat', val('NETECO Status')),
+      ('-', 'Rect. Cond', val('Rectifier Condition')),
+      ('-', 'Utility', util_str),
+      ('-', 'Config', val('Rectifier Config (Category)')),
+      ('-', 'Cap. Status', val('Capacity Status')),
+      ('-', 'Pot. Trip', val('Potensial Trip')),
+      ('-', 'SOW Act.', val('Activity (SOW) Actual')),
+      ('-', 'EAS Valid.', val('EAS Validation')),
+      ('-', 'NETECO Stat', val('NETECO Status')),
   ]
 
   render_box(site_cfg, col_site)
@@ -174,18 +178,18 @@ def generate_site_card(site_id):
   render_box(batt_cfg, col_batt)
   render_box(health_cfg, col_health)
 
-  line_y = health_cfg['start_y'] + (len(col_health) * health_cfg['spacing']) - 8
+  line_y = health_cfg['start_y'] + (len(col_health) * health_cfg['spacing']) - 10
   draw.text((health_cfg['colon_x'], line_y), '===============', fill=COLOR_LABEL, font=font)
 
-  act_start_y = line_y + 30
-  draw.text((health_cfg['start_x'], act_start_y), '🛠️', fill=COLOR_TEXT, font=font)
-  draw.text((health_cfg['start_x'] + 38, act_start_y), 'Action', fill=COLOR_LABEL, font=font)
+  act_start_y = line_y + 40
+  draw.text((health_cfg['start_x'], act_start_y), '-', fill=COLOR_TEXT, font=font)
+  draw.text((health_cfg['label_x'], act_start_y), 'Action', fill=COLOR_LABEL, font=font)
   draw.text((health_cfg['colon_x'], act_start_y), ':', fill=COLOR_TEXT, font=font)
 
   current_y = act_start_y
   for idx, action_item in enumerate(action_list):
     if idx > 0:
-      current_y += 30
+      current_y += 45
     val_color = get_dynamic_color(action_item)
     draw.text((health_cfg['val_x'], current_y), f' {action_item}', fill=val_color, font=font)
 
