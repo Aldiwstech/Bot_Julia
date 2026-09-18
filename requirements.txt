@@ -1,4 +1,6 @@
+pytelegrambotapi
 pandas
 pillow
-python-telegram-bot
 openpyxl
+flask
+requests
