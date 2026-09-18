@@ -3,7 +3,7 @@ import telebot
 from PIL import Image, ImageDraw, ImageFont
 import pandas as pd
 
-TOKEN = '8955027973:AAH1dm2tOBRMf85PxyON9MMKM-fw8ekrZnM'
+TOKEN = '8525438495:AAHFiM1MEs8p-oJBiPlUg2AjZWzr_eH5c6I'
 bot = telebot.TeleBot(TOKEN)
 
 
