@@ -3,8 +3,13 @@ import telebot
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 
-TOKEN = '8525438495:AAHFiM1MEs8p-oJBiPlUg2AjZWzr_eH5c6I'
+# AMBIL TOKEN LANGSUNG DARI RAILWAY VARIABELS (AMAN DARI ERROR COLON)
+TOKEN = os.getenv('TOKEN')
+if not TOKEN:
+  raise ValueError("Token belum diset di Environment Variables Railway!")
+  
 bot = telebot.TeleBot(TOKEN)
+
 
 def generate_site_card(site_id):
   excel_path = 'Excel_master.xlsx'
