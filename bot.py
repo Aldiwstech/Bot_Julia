@@ -3,8 +3,7 @@ import telebot
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 
-# Ganti dengan token bot Telegram Anda
-TOKEN = '8525438495:AAHFiM1MEs8p-oJBiPlUg2AjZWzr_eH5c6I'
+TOKEN = 'MASUKKAN_TOKEN_BOT_ANDA_DI_SINI'
 bot = telebot.TeleBot(TOKEN)
 
 def generate_site_card(site_id):
@@ -41,10 +40,12 @@ def generate_site_card(site_id):
   img = Image.open(mockup_path).convert('RGB')
   draw = ImageDraw.Draw(img)
 
-  # PERBESAR UKURAN FONT SUPAYA JELAS DAN TIDAK KECIL
-  font_size = 30
+  # GUNAKAN FONT DEJAVUSANS.TTF YANG DI-UPLOAD KE GITHUB
+  font_size = 24
+  font_path = 'DejaVuSans.ttf'
+  
   try:
-    font = ImageFont.truetype('seguiemj.ttf', font_size)
+    font = ImageFont.truetype(font_path, font_size)
   except:
     try:
       font = ImageFont.truetype('arial.ttf', font_size)
@@ -65,32 +66,14 @@ def generate_site_card(site_id):
 
   def get_dynamic_color(text):
     t = str(text).upper()
-    if any(
-        w in t
-        for w in [
-            'DOWN',
-            'CRITICAL',
-            'NO BACKUP',
-            'NOT AVAILABLE',
-            'NEED VALIDATION',
-            'NOT_AVAILABLE',
-            'POTENSIAL TRIP',
-            'TRIP',
-            'NEED',
-            'PERGANTIAN',
-        ]
-    ):
+    if any(w in t for w in ['DOWN', 'CRITICAL', 'NO BACKUP', 'NOT AVAILABLE', 'NEED VALIDATION', 'NOT_AVAILABLE', 'POTENSIAL TRIP', 'TRIP', 'NEED', 'PERGANTIAN']):
       return COLOR_RED
-    elif any(
-        w in t
-        for w in ['NORMAL', 'SECURED', 'VALID', 'OK', 'AVAILABLE', 'VIP', 'MONITOR']
-    ):
+    elif any(w in t for w in ['NORMAL', 'SECURED', 'VALID', 'OK', 'AVAILABLE', 'VIP', 'MONITOR']):
       return COLOR_GREEN
     elif any(w in t for w in ['SILVER', 'GOLD', 'LITHIUM', 'HUAWEI', 'TELKOM']):
       return COLOR_BLUE
     return COLOR_TEXT
 
-  # --- AMBIL DATA ACTION DARI EXCEL ---
   action_list = []
   for col_name in ['Action', 'Activity (SOW) Actual', 'SOW']:
     if col_name in site_data:
@@ -117,11 +100,11 @@ def generate_site_card(site_id):
     if not action_list:
       action_list = ['NORMAL']
 
-  # KOORDINAT & SPASI YANG DISESUAIKAN DENGAN FONT BESAR
-  site_cfg = {'start_x': 45, 'start_y': 225, 'colon_x': 200, 'val_x': 215, 'spacing': 48}
-  rect_cfg = {'start_x': 540, 'start_y': 225, 'colon_x': 740, 'val_x': 765, 'spacing': 48}
-  batt_cfg = {'start_x': 540, 'start_y': 625, 'colon_x': 740, 'val_x': 765, 'spacing': 48}
-  health_cfg = {'start_x': 1020, 'start_y': 225, 'colon_x': 1220, 'val_x': 1245, 'spacing': 42}
+  # KOORDINAT & SPASI YANG PAS
+  site_cfg = {'start_x': 45, 'start_y': 225, 'colon_x': 200, 'val_x': 215, 'spacing': 42}
+  rect_cfg = {'start_x': 540, 'start_y': 225, 'colon_x': 740, 'val_x': 765, 'spacing': 42}
+  batt_cfg = {'start_x': 540, 'start_y': 625, 'colon_x': 740, 'val_x': 765, 'spacing': 42}
+  health_cfg = {'start_x': 1020, 'start_y': 225, 'colon_x': 1220, 'val_x': 1245, 'spacing': 37}
 
   def render_box(cfg, items):
     y = cfg['start_y']
@@ -131,7 +114,7 @@ def generate_site_card(site_id):
         y += int(spacing * 0.4)
         continue
       draw.text((cfg['start_x'], y), emoji, fill=COLOR_TEXT, font=font)
-      draw.text((cfg['start_x'] + 42, y), label, fill=COLOR_LABEL, font=font)
+      draw.text((cfg['start_x'] + 38, y), label, fill=COLOR_LABEL, font=font)
       draw.text((cfg['colon_x'], y), ':', fill=COLOR_TEXT, font=font)
       val_color = get_dynamic_color(value)
       draw.text((cfg['val_x'], y), f' {value}', fill=val_color, font=font)
@@ -188,18 +171,18 @@ def generate_site_card(site_id):
   render_box(batt_cfg, col_batt)
   render_box(health_cfg, col_health)
 
-  line_y = health_cfg['start_y'] + (len(col_health) * health_cfg['spacing']) - 10
+  line_y = health_cfg['start_y'] + (len(col_health) * health_cfg['spacing']) - 8
   draw.text((health_cfg['colon_x'], line_y), '===============', fill=COLOR_LABEL, font=font)
 
-  act_start_y = line_y + 35
+  act_start_y = line_y + 30
   draw.text((health_cfg['start_x'], act_start_y), '🛠️', fill=COLOR_TEXT, font=font)
-  draw.text((health_cfg['start_x'] + 42, act_start_y), 'Action', fill=COLOR_LABEL, font=font)
+  draw.text((health_cfg['start_x'] + 38, act_start_y), 'Action', fill=COLOR_LABEL, font=font)
   draw.text((health_cfg['colon_x'], act_start_y), ':', fill=COLOR_TEXT, font=font)
 
   current_y = act_start_y
   for idx, action_item in enumerate(action_list):
     if idx > 0:
-      current_y += 35
+      current_y += 30
     val_color = get_dynamic_color(action_item)
     draw.text((health_cfg['val_x'], current_y), f' {action_item}', fill=val_color, font=font)
 
@@ -212,16 +195,15 @@ def generate_site_card(site_id):
 def handle_site(message):
   args = message.text.split()
   if len(args) < 2:
-    bot.reply_to(message, "⚠️ Format salah! Gunakan perintah: `/site <Site_ID>`", parse_mode='Markdown')
+    bot.reply_to(message, "⚠️ Format salah! Gunakan: `/site <Site_ID>`", parse_mode='Markdown')
     return
 
   site_id = args[1]
-  bot.reply_to(message, f"⏳ Sedang memproses data untuk Site ID: *{site_id}*...", parse_mode='Markdown')
+  bot.reply_to(message, f"⏳ Sedang memproses Site ID: *{site_id}*...", parse_mode='Markdown')
 
   img_path = generate_site_card(site_id)
 
   if img_path and os.path.exists(img_path):
-    # MENGGUNAKAN SEND_DOCUMENT AGAR TIDAK DIKOMPRESI JADI KECIL OLEH TELEGRAM
     with open(img_path, 'rb') as doc_file:
       bot.send_document(
           message.chat.id,
@@ -231,7 +213,7 @@ def handle_site(message):
       )
     os.remove(img_path)
   else:
-    bot.reply_to(message, f"❌ Maaf, Site ID *{site_id}* tidak ditemukan di dalam file Excel.", parse_mode='Markdown')
+    bot.reply_to(message, f"❌ Maaf, Site ID *{site_id}* tidak ditemukan.", parse_mode='Markdown')
 
 
 print("Bot Telegram siap dijalankan...")
