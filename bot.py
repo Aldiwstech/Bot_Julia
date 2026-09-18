@@ -1,11 +1,11 @@
 import os
 import telebot
-from PIL import Image, ImageDraw, ImageFont
 import pandas as pd
+from PIL import Image, ImageDraw, ImageFont
 
+# Ganti dengan token bot Telegram Anda
 TOKEN = '8525438495:AAHFiM1MEs8p-oJBiPlUg2AjZWzr_eH5c6I'
 bot = telebot.TeleBot(TOKEN)
-
 
 def generate_site_card(site_id):
   excel_path = 'Excel_master.xlsx'
@@ -41,7 +41,8 @@ def generate_site_card(site_id):
   img = Image.open(mockup_path).convert('RGB')
   draw = ImageDraw.Draw(img)
 
-  font_size = 21
+  # PERBESAR UKURAN FONT SUPAYA JELAS DAN TIDAK KECIL
+  font_size = 30
   try:
     font = ImageFont.truetype('seguiemj.ttf', font_size)
   except:
@@ -76,27 +77,33 @@ def generate_site_card(site_id):
             'POTENSIAL TRIP',
             'TRIP',
             'NEED',
+            'PERGANTIAN',
         ]
     ):
       return COLOR_RED
     elif any(
         w in t
-        for w in ['NORMAL', 'SECURED', 'VALID', 'OK', 'AVAILABLE', 'VIP']
+        for w in ['NORMAL', 'SECURED', 'VALID', 'OK', 'AVAILABLE', 'VIP', 'MONITOR']
     ):
       return COLOR_GREEN
     elif any(w in t for w in ['SILVER', 'GOLD', 'LITHIUM', 'HUAWEI', 'TELKOM']):
       return COLOR_BLUE
     return COLOR_TEXT
 
-  excel_action = site_data.get('Action')
-  if pd.notnull(excel_action) and str(excel_action).strip() not in ['', '-']:
-    action_list = [str(excel_action)]
-  else:
-    action_list = []
-    rect_cond = str(site_data.get('Rectifier Condition', '')).upper()
-    pot_trip = str(site_data.get('Potensial Trip', '')).upper()
-    eas_val = str(site_data.get('EAS Validation', '')).upper()
-    neteco = str(site_data.get('NETECO Status', '')).upper()
+  # --- AMBIL DATA ACTION DARI EXCEL ---
+  action_list = []
+  for col_name in ['Action', 'Activity (SOW) Actual', 'SOW']:
+    if col_name in site_data:
+      excel_action = site_data.get(col_name)
+      if pd.notnull(excel_action) and str(excel_action).strip() not in ['', '-', 'nan']:
+        action_list.append(str(excel_action).strip())
+        break
+
+  if not action_list:
+    rect_cond = str(val('Rectifier Condition')).upper()
+    pot_trip = str(val('Potensial Trip')).upper()
+    eas_val = str(val('EAS Validation')).upper()
+    neteco = str(val('NETECO Status')).upper()
 
     if 'DOWN' in rect_cond or 'CRITICAL' in rect_cond:
       action_list.append('NEED REPLACE RECTIFIER')
@@ -110,34 +117,11 @@ def generate_site_card(site_id):
     if not action_list:
       action_list = ['NORMAL']
 
-  site_cfg = {
-      'start_x': 45,
-      'start_y': 225,
-      'colon_x': 200,
-      'val_x': 215,
-      'spacing': 38,
-  }
-  rect_cfg = {
-      'start_x': 540,
-      'start_y': 225,
-      'colon_x': 740,
-      'val_x': 765,
-      'spacing': 38,
-  }
-  batt_cfg = {
-      'start_x': 540,
-      'start_y': 625,
-      'colon_x': 740,
-      'val_x': 765,
-      'spacing': 38,
-  }
-  health_cfg = {
-      'start_x': 1020,
-      'start_y': 225,
-      'colon_x': 1220,
-      'val_x': 1245,
-      'spacing': 34,
-  }
+  # KOORDINAT & SPASI YANG DISESUAIKAN DENGAN FONT BESAR
+  site_cfg = {'start_x': 45, 'start_y': 225, 'colon_x': 200, 'val_x': 215, 'spacing': 48}
+  rect_cfg = {'start_x': 540, 'start_y': 225, 'colon_x': 740, 'val_x': 765, 'spacing': 48}
+  batt_cfg = {'start_x': 540, 'start_y': 625, 'colon_x': 740, 'val_x': 765, 'spacing': 48}
+  health_cfg = {'start_x': 1020, 'start_y': 225, 'colon_x': 1220, 'val_x': 1245, 'spacing': 42}
 
   def render_box(cfg, items):
     y = cfg['start_y']
@@ -147,9 +131,7 @@ def generate_site_card(site_id):
         y += int(spacing * 0.4)
         continue
       draw.text((cfg['start_x'], y), emoji, fill=COLOR_TEXT, font=font)
-      draw.text(
-          (cfg['start_x'] + 38, y), label, fill=COLOR_LABEL, font=font
-      )
+      draw.text((cfg['start_x'] + 42, y), label, fill=COLOR_LABEL, font=font)
       draw.text((cfg['colon_x'], y), ':', fill=COLOR_TEXT, font=font)
       val_color = get_dynamic_color(value)
       draw.text((cfg['val_x'], y), f' {value}', fill=val_color, font=font)
@@ -177,9 +159,7 @@ def generate_site_card(site_id):
   ]
 
   bbt_val = site_data.get('BBT H (1)') if 'BBT H (1)' in site_data else None
-  bbt_str = (
-      f'{round(float(bbt_val), 2)} Hours' if pd.notnull(bbt_val) else '-'
-  )
+  bbt_str = f'{round(float(bbt_val), 2)} Hours' if pd.notnull(bbt_val) and str(bbt_val).replace('.','',1).isdigit() else '-'
   col_batt = [
       ('🔋', 'Brand', val('Battery Brand (1)')),
       ('🧪', 'Type', val('Battery Type (1)')),
@@ -189,14 +169,8 @@ def generate_site_card(site_id):
       ('📊', 'Category', val('BBT Category (1)')),
   ]
 
-  util_val = (
-      site_data.get('Rectifier Utility')
-      if 'Rectifier Utility' in site_data
-      else None
-  )
-  util_str = (
-      f'{round(float(util_val) * 100, 1)} %' if pd.notnull(util_val) else '-'
-  )
+  util_val = site_data.get('Rectifier Utility') if 'Rectifier Utility' in site_data else None
+  util_str = f'{round(float(util_val) * 100, 1)} %' if pd.notnull(util_val) and str(util_val).replace('.','',1).isdigit() else '-'
 
   col_health = [
       ('🔧', 'Rect. Cond', val('Rectifier Condition')),
@@ -214,73 +188,51 @@ def generate_site_card(site_id):
   render_box(batt_cfg, col_batt)
   render_box(health_cfg, col_health)
 
-  line_y = (
-      health_cfg['start_y'] + len(col_health) * health_cfg['spacing'] - 6
-  )
-  draw.text(
-      (health_cfg['colon_x'], line_y),
-      '===============',
-      fill=COLOR_LABEL,
-      font=font,
-  )
+  line_y = health_cfg['start_y'] + (len(col_health) * health_cfg['spacing']) - 10
+  draw.text((health_cfg['colon_x'], line_y), '===============', fill=COLOR_LABEL, font=font)
 
-  act_start_y = line_y + 28
-  draw.text(
-      (health_cfg['start_x'], act_start_y), '🛠️', fill=COLOR_TEXT, font=font
-  )
-  draw.text(
-      (health_cfg['start_x'] + 38, act_start_y),
-      'Action',
-      fill=COLOR_LABEL,
-      font=font,
-  )
-  draw.text(
-      (health_cfg['colon_x'], act_start_y), ':', fill=COLOR_TEXT, font=font
-  )
+  act_start_y = line_y + 35
+  draw.text((health_cfg['start_x'], act_start_y), '🛠️', fill=COLOR_TEXT, font=font)
+  draw.text((health_cfg['start_x'] + 42, act_start_y), 'Action', fill=COLOR_LABEL, font=font)
+  draw.text((health_cfg['colon_x'], act_start_y), ':', fill=COLOR_TEXT, font=font)
 
   current_y = act_start_y
   for idx, action_item in enumerate(action_list):
     if idx > 0:
-      current_y += 28
+      current_y += 35
     val_color = get_dynamic_color(action_item)
-    draw.text(
-        (health_cfg['val_x'], current_y),
-        f' {action_item}',
-        fill=val_color,
-        font=font,
-    )
+    draw.text((health_cfg['val_x'], current_y), f' {action_item}', fill=val_color, font=font)
 
   output_path = f'output_{site_id}.png'
-  img.save(output_path)
+  img.save(output_path, dpi=(300, 300), quality=95)
   return output_path
 
 
-@bot.message_handler(commands=['start', 'help'])
-def send_welcome(message):
-  bot.reply_to(
-      message,
-      'Halo! Ketik /site [Site ID] untuk generate kartu status site Telkomsel.',
-  )
-
-
-import os
-# ... (import library lain)
-
 @bot.message_handler(commands=['site'])
 def handle_site(message):
-  # ... (proses generate site_id)
+  args = message.text.split()
+  if len(args) < 2:
+    bot.reply_to(message, "⚠️ Format salah! Gunakan perintah: `/site <Site_ID>`", parse_mode='Markdown')
+    return
+
+  site_id = args[1]
+  bot.reply_to(message, f"⏳ Sedang memproses data untuk Site ID: *{site_id}*...", parse_mode='Markdown')
 
   img_path = generate_site_card(site_id)
+
   if img_path and os.path.exists(img_path):
-    # Gunakan send_document agar file asli terkirim tanpa kompresi
-    with open(img_path, 'rb') as photo_file:
-        bot.send_document(
-            message.chat.id, 
-            photo_file, 
-            caption=f'✅ Status untuk Site ID: {site_id} (Resolusi Penuh)'
-        )
+    # MENGGUNAKAN SEND_DOCUMENT AGAR TIDAK DIKOMPRESI JADI KECIL OLEH TELEGRAM
+    with open(img_path, 'rb') as doc_file:
+      bot.send_document(
+          message.chat.id,
+          doc_file,
+          caption=f"✅ Status Report Site ID: *{site_id}*",
+          parse_mode='Markdown'
+      )
     os.remove(img_path)
   else:
-    bot.reply_to(
-        message, f'❌ Maaf, Site ID {site_id} tidak ditemukan di database Excel!'
-    )
+    bot.reply_to(message, f"❌ Maaf, Site ID *{site_id}* tidak ditemukan di dalam file Excel.", parse_mode='Markdown')
+
+
+print("Bot Telegram siap dijalankan...")
+bot.infinity_polling()
