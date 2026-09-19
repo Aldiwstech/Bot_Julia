@@ -1,456 +1,389 @@
 import os
-import glob
 import re
-import textwrap
 import telebot
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 
-TOKEN = os.getenv('TOKEN')
+TOKEN = os.getenv("TOKEN")
 if not TOKEN:
-    raise ValueError('Token belum diset di Environment Variables Railway!')
+    raise ValueError("Token belum diset di Environment Variables Railway!")
 
 bot = telebot.TeleBot(TOKEN)
 
-# ============================================================
-# FONT
-# ============================================================
-def find_font(preferred=None, size=18, bold=False):
-    candidates = []
-    if preferred:
-        candidates.append(preferred)
+EXCEL_CANDIDATES = ["Excel_master.xlsx", "Excel_master(1).xlsx"]
+MOCKUP_CANDIDATES = ["Mokup.png", "mokup.png", "mokup(1).png", "Mokup(1).png"]
 
-    # Jika TTF diletakkan di root repository, ikut dicari.
+# Mockup final yang Anda upload: 1672 x 941 px
+BASE_W = 1672
+BASE_H = 941
+
+def get_font(size, bold=False):
+    candidates = []
+    env_path = os.getenv("FONT_PATH")
+    if env_path:
+        candidates.append(env_path)
+
     if bold:
-        candidates += glob.glob('*Bold*.ttf') + glob.glob('*bold*.ttf')
         candidates += [
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-            '/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf',
-            '/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf',
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+            "DejaVuSans-Bold.ttf",
+            "LiberationSans-Bold.ttf",
         ]
     else:
-        candidates += glob.glob('*.ttf') + glob.glob('*.TTF')
         candidates += [
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-            '/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf',
-            'DejaVuSans.ttf',
-            'arial.ttf',
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+            "DejaVuSans.ttf",
+            "LiberationSans-Regular.ttf",
         ]
 
-    # Hilangkan duplikat sambil mempertahankan urutan prioritas.
-    seen = set()
     for path in candidates:
-        if not path or path in seen:
-            continue
-        seen.add(path)
-        if os.path.exists(path):
+        if path and os.path.exists(path):
             try:
                 return ImageFont.truetype(path, size)
             except Exception:
                 pass
-
     return ImageFont.load_default()
 
+def find_existing(candidates):
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return None
 
-FONT_PATH = os.getenv('FONT_PATH') or None
-BOLD_FONT_PATH = os.getenv('BOLD_FONT_PATH') or os.getenv('FONT_BOLD_PATH') or None
+def clean_filename(text):
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", str(text))
 
-
-# ============================================================
-# HELPER
-# ============================================================
 def safe_float(value):
     try:
         if pd.isna(value):
             return None
-        text = str(value).strip().replace(',', '.')
-        return float(text)
+        return float(str(value).strip().replace(",", "."))
     except Exception:
         return None
 
-
-def clean_filename(text):
-    return re.sub(r'[^A-Za-z0-9._-]+', '_', str(text))
-
-
-def clean_value(value, default='-'):
+def is_empty(value):
     if value is None:
-        return default
+        return True
     try:
         if pd.isna(value):
-            return default
+            return True
     except Exception:
         pass
-    text = str(value).strip()
-    if text.lower() in ('', 'nan', 'none', 'nat'):
+    return str(value).strip().lower() in ("", "nan", "none", "-")
+
+def display_value(value, default="-"):
+    if is_empty(value):
         return default
-    return text
+    return str(value).strip()
 
-
-def wrap_text(draw, text, font, max_width):
-    """Wrap berdasarkan ukuran pixel, bukan jumlah karakter."""
-    text = str(text)
-    if not text:
-        return ['-']
-
-    words = text.split()
-    lines = []
-    current = ''
-
-    for word in words:
-        trial = word if not current else current + ' ' + word
-        bbox = draw.textbbox((0, 0), trial, font=font)
+def fit_font(draw, text, max_width, size=21, minimum=12, bold=True):
+    current = size
+    while current > minimum:
+        font = get_font(current, bold=bold)
+        bbox = draw.textbbox((0, 0), str(text), font=font)
         if bbox[2] - bbox[0] <= max_width:
-            current = trial
+            return font
+        current -= 1
+    return get_font(minimum, bold=bold)
+
+def shorten_text(draw, text, max_width, font):
+    """Potong teks dengan ... agar tidak keluar dari area card."""
+    text = str(text)
+    if draw.textbbox((0, 0), text, font=font)[2] <= max_width:
+        return text
+
+    suffix = "..."
+    lo, hi = 0, len(text)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        candidate = text[:mid].rstrip() + suffix
+        if draw.textbbox((0, 0), candidate, font=font)[2] <= max_width:
+            lo = mid
         else:
-            if current:
-                lines.append(current)
-            current = word
-
-    if current:
-        lines.append(current)
-
-    # Kalau satu kata saja lebih panjang dari area, biarkan fit_font yang mengecilkan.
-    return lines or [text]
+            hi = mid - 1
+    return text[:lo].rstrip() + suffix
 
 
-def get_dynamic_color(text):
-    t = str(text).upper()
+def dynamic_color(value):
+    text = str(value).strip().upper()
 
-    if any(w in t for w in [
-        'DOWN', 'CRITICAL', 'NO BACKUP', 'NOT AVAILABLE',
-        'NEED VALIDATION', 'NOT_AVAILABLE', 'POTENSIAL TRIP',
-        'TRIP', 'NEED', 'PERGANTIAN', 'REPLACE'
-    ]):
-        return (211, 47, 47)
+    red_words = (
+        "CRITICAL", "DOWN", "NOT AVAILABLE", "NOT_AVAILABLE",
+        "NEED", "TRIP", "PERGANTIAN", "FAULT", "FAILED",
+        "ERROR", "NO BACKUP",
+    )
+    orange_words = (
+        "WARNING", "POTENSIAL", "POTENTIAL", "MEDIUM",
+        "FAIR", "LOW", "CHECK",
+    )
+    green_words = (
+        "NORMAL", "SECURED", "OK", "VALID", "AVAILABLE",
+        "MONITOR", "SAFE",
+    )
 
-    if any(w in t for w in [
-        'NORMAL', 'SECURED', 'VALID', 'OK', 'AVAILABLE', 'MONITOR'
-    ]):
-        return (18, 137, 72)
+    if any(word in text for word in red_words):
+        return (211, 42, 50)
+    if any(word in text for word in orange_words):
+        return (232, 142, 18)
+    if any(word in text for word in green_words):
+        return (20, 142, 68)
+    return (24, 55, 105)
 
-    # Value umum dibuat navy agar konsisten dengan mockup.
-    return (24, 55, 96)
+def load_site(site_id):
+    excel_path = find_existing(EXCEL_CANDIDATES)
+    if not excel_path:
+        raise FileNotFoundError("Excel_master.xlsx tidak ditemukan.")
 
+    df = pd.read_excel(excel_path, sheet_name="Rectifire&battery")
+    if "Site ID" not in df.columns:
+        raise KeyError("Kolom 'Site ID' tidak ditemukan.")
 
-# ============================================================
-# GENERATE REPORT
-# ============================================================
-def generate_site_card(site_id):
-    excel_path = 'Excel_master.xlsx'
-    mockup_path = 'Mokup.png'
+    wanted = str(site_id).strip().upper()
+    ids = df["Site ID"].astype(str).str.strip().str.upper()
+    result = df.loc[ids == wanted]
 
-    if not os.path.exists(excel_path):
-        print('Excel_master.xlsx tidak ditemukan')
-        return None
-    if not os.path.exists(mockup_path):
-        print('Mokup.png tidak ditemukan')
-        return None
+    return None if result.empty else result.iloc[0]
 
-    wanted_id = str(site_id).strip().upper()
-    site_data = None
+def value(row, column, default="-"):
+    if column not in row.index:
+        return default
+    return display_value(row[column], default)
 
-    try:
-        xls = pd.ExcelFile(excel_path)
-        for sheet_name in xls.sheet_names:
-            df = pd.read_excel(excel_path, sheet_name=sheet_name)
-            id_col = None
+def build_actions(row):
+    actions = []
 
-            for col in df.columns:
-                name = str(col).lower()
-                if 'site' in name and 'id' in name:
-                    id_col = col
-                    break
-
-            if id_col is not None:
-                ids = df[id_col].astype(str).str.strip().str.upper()
-                filtered = df[ids == wanted_id]
-                if not filtered.empty:
-                    site_data = filtered.iloc[0]
-                    break
-    except Exception as exc:
-        print(f'Error membaca Excel: {exc}')
-        return None
-
-    if site_data is None:
-        return None
-
-    img = Image.open(mockup_path).convert('RGB')
-    draw = ImageDraw.Draw(img)
-    W, H = img.size
-
-    # ========================================================
-    # MOCKUP FINAL: 1672 x 941
-    # Jangan menggambar ulang icon/label karena semuanya sudah
-    # menjadi bagian dari Mokup.png.
-    # Script hanya mengisi VALUE dan Data Update.
-    # ========================================================
-    BASE_W, BASE_H = 1672, 941
-    sx = W / BASE_W
-    sy = H / BASE_H
-
-    # Font value dibuat bold agar sama dengan contoh output yang diinginkan.
-    VALUE_SIZE = round(21 * sx)
-    VALUE_SMALL = round(18 * sx)
-    FOOTER_SIZE = round(18 * sx)
-
-    value_font = find_font(BOLD_FONT_PATH, size=VALUE_SIZE, bold=True)
-    footer_font = find_font(BOLD_FONT_PATH, size=FOOTER_SIZE, bold=True)
-
-    def val(col, default='-'):
-        return clean_value(site_data.get(col), default) if col in site_data else default
-
-    # ========================================================
-    # DATA
-    # ========================================================
-    bbt = safe_float(site_data.get('BBT H (1)')) if 'BBT H (1)' in site_data else None
-    bbt_str = f'{bbt:.2f} Hours' if bbt is not None else '-'
-
-    util = safe_float(site_data.get('Rectifier Utility')) if 'Rectifier Utility' in site_data else None
-    util_str = f'{util * 100:.1f} %' if util is not None else '-'
-
-    col_site = [
-        ('Site ID', val('Site ID')),
-        ('Site Name', val('Site Name')),
-        ('Regional', val('Regional')),
-        ('NOP', val('NOP_1')),
-        ('TO', val('TO')),
-        ('ROH', val('ROH')),
-        ('Site Owner', val('Site Owner')),
-        ('Lat / Long', f"{val('Lat')} / {val('Long')}"),
-    ]
-
-    col_rect = [
-        ('ID PLN', val('ID PLN')),
-        ('Daya PLN', f"{val('Daya PLN (KVA)')} kVA"),
-        ('Brand', val('Rectifier Brand (1)')),
-        ('Model', val('Rectifier Model (1)')),
-        ('Capacity', val('Module Capacity (1)')),
-        ('Module Qty', val('Inserted Module Qty (1)')),
-        ('Load System', val('Load System (1)')),
-    ]
-
-    col_batt = [
-        ('Brand', val('Battery Brand (1)')),
-        ('Type', val('Battery Type (1)')),
-        ('Capacity', val('Battery Capacity (1)')),
-        ('Bank Qty', val('Battery Bank (1)')),
-        ('BBT Backup', bbt_str),
-        ('Category', val('BBT Category (1)')),
-    ]
-
-    col_health = [
-        ('Rect. Cond', val('Rectifier Condition')),
-        ('Utility', util_str),
-        ('Config', val('Rectifier Config (Category)')),
-        ('Cap. Status', val('Capacity Status')),
-        ('Pot. Trip', val('Potensial Trip')),
-        ('SOW Act.', val('Activity (SOW) Actual')),
-        ('EAS Valid.', val('EAS Validation')),
-        ('NETECO Stat', val('NETECO Status')),
-    ]
-
-    # ========================================================
-    # ACTION
-    # ========================================================
-    action_list = []
-    for col_name in ['Action', 'Activity (SOW) Actual', 'SOW']:
-        if col_name in site_data:
-            action = clean_value(site_data.get(col_name), '')
-            if action not in ('', '-'):
-                action_list.append(action)
+    for col in ("Action", "Activity (SOW) Actual"):
+        if col in row.index and not is_empty(row[col]):
+            text = str(row[col]).strip()
+            if text != "-":
+                actions.append(text)
                 break
 
-    if not action_list:
-        rect_cond = val('Rectifier Condition').upper()
-        pot_trip = val('Potensial Trip').upper()
-        eas_val = val('EAS Validation').upper()
-        neteco = val('NETECO Status').upper()
+    eas = value(row, "EAS Validation").upper()
+    neteco = value(row, "NETECO Status").upper()
+    rect = value(row, "Rectifier Condition").upper()
 
-        if 'DOWN' in rect_cond or 'CRITICAL' in rect_cond:
-            action_list.append('NEED REPLACE RECTIFIER')
-        if 'TRIP' in pot_trip or 'POTENSIAL' in pot_trip:
-            action_list.append('NEED CHECK LOAD')
-        if 'NEED' in eas_val or 'VALIDATION' in eas_val:
-            action_list.append('NEED VALIDATE')
-        if 'NOT AVAILABLE' in neteco or 'DOWN' in neteco:
-            action_list.append('NEED CHECK NETECO')
-        if not action_list:
-            action_list = ['NORMAL']
+    if "DOWN" in rect or "CRITICAL" in rect:
+        actions.append("NEED REPLACE RECTIFIER")
+    if "NEED" in eas or "VALIDATION" in eas:
+        actions.append("NEED VALIDATE")
+    if "NOT AVAILABLE" in neteco or "DOWN" in neteco:
+        actions.append("NEED CHECK NETECO")
 
-    # ========================================================
-    # KOORDINAT VALUE SAJA
-    # Koordinat mengikuti titik ':' yang sudah ada di mockup.
-    # ========================================================
-    boxes = {
-        'site': {
-            'x': 273, 'y': 236, 'gap': 54,
-            'max_width': 185, 'max_height': 42,
-        },
-        'rect': {
-            'x': 780, 'y': 211, 'gap': 45,
-            'max_width': 285, 'max_height': 40,
-        },
-        'batt': {
-            'x': 780, 'y': 609, 'gap': 40,
-            'max_width': 285, 'max_height': 38,
-        },
-        'health': {
-            'x': 1375, 'y': 229, 'gap': 54,
-            'max_width': 215, 'max_height': 42,
-        },
-    }
+    unique = []
+    for item in actions:
+        if item not in unique:
+            unique.append(item)
+    return unique or ["NORMAL"]
 
-    # Scale koordinat jika gambar ternyata berubah ukuran.
-    for cfg in boxes.values():
-        cfg['x'] = round(cfg['x'] * sx)
-        cfg['y'] = round(cfg['y'] * sy)
-        cfg['gap'] = round(cfg['gap'] * sy)
-        cfg['max_width'] = round(cfg['max_width'] * sx)
-        cfg['max_height'] = round(cfg['max_height'] * sy)
+def generate_site_card(site_id):
+    row = load_site(site_id)
+    if row is None:
+        return None
 
-    def fit_bold_font(text, max_width, start_size=VALUE_SIZE, minimum=13):
-        size = max(start_size, minimum)
-        while size > minimum:
-            f = find_font(BOLD_FONT_PATH, size=size, bold=True)
-            bbox = draw.textbbox((0, 0), str(text), font=f)
-            if bbox[2] - bbox[0] <= max_width:
-                return f
-            size -= 1
-        return find_font(BOLD_FONT_PATH, size=minimum, bold=True)
+    mockup_path = find_existing(MOCKUP_CANDIDATES)
+    if not mockup_path:
+        raise FileNotFoundError("Mokup.png tidak ditemukan.")
 
-    def draw_value(x, y, value, max_width, center_y=True):
-        text = clean_value(value)
-        color = get_dynamic_color(text)
-        f = fit_bold_font(text, max_width)
-        bbox = draw.textbbox((0, 0), text, font=f)
-        text_h = bbox[3] - bbox[1]
-        yy = y - text_h / 2 if center_y else y
-        draw.text((x, yy), text, fill=color, font=f)
+    img = Image.open(mockup_path).convert("RGB")
+    sx = img.width / BASE_W
+    sy = img.height / BASE_H
+    draw = ImageDraw.Draw(img)
 
-    def draw_wrapped_value(x, y, value, max_width, max_lines=2, line_gap=4):
-        text = clean_value(value)
-        # Coba satu baris dulu.
-        f = fit_bold_font(text, max_width)
-        bbox = draw.textbbox((0, 0), text, font=f)
-        if bbox[2] - bbox[0] <= max_width and len(text) <= 34:
-            draw.text((x, y - (bbox[3] - bbox[1]) / 2), text,
-                      fill=get_dynamic_color(text), font=f)
+    fs = min(sx, sy)
+    base_size = max(15, round(21 * fs))
+    small_size = max(13, round(18 * fs))
+
+    def xy(x, y):
+        return (round(x * sx), round(y * sy))
+
+    def write_value(text, x, y, max_width, size=base_size, minimum=11, max_lines=1):
+        text = display_value(text)
+        pixel_width = round(max_width * sx)
+        font = fit_font(
+            draw, text, pixel_width,
+            size=round(size * fs), minimum=minimum, bold=True
+        )
+
+        # Normal row: satu baris, diperkecil lalu dipotong aman jika perlu.
+        if max_lines == 1:
+            final_text = shorten_text(draw, text, pixel_width, font)
+            draw.text(
+                xy(x, y), final_text, font=font,
+                fill=dynamic_color(final_text), anchor="lm"
+            )
             return
 
-        # Untuk SOW/Action panjang, wrap maksimal 2 baris dengan font tetap terbaca.
-        f = find_font(BOLD_FONT_PATH, size=max(VALUE_SMALL, 15), bold=True)
-        lines = wrap_text(draw, text, f, max_width)
-        lines = lines[:max_lines]
-        if len(lines) == max_lines and len(wrap_text(draw, text, f, max_width)) > max_lines:
-            last = lines[-1]
-            while last and draw.textbbox((0, 0), last + '...', font=f)[2] - draw.textbbox((0, 0), last + '...', font=f)[0] > max_width:
-                last = last[:-1]
-            lines[-1] = (last.rstrip() + '...') if last else '...'
+        # Long text: wrap sampai maksimal max_lines baris.
+        words = text.split()
+        lines = []
+        current = ""
+        for word in words:
+            candidate = word if not current else current + " " + word
+            if draw.textbbox((0, 0), candidate, font=font)[2] <= pixel_width:
+                current = candidate
+            else:
+                if current:
+                    lines.append(current)
+                current = word
+        if current:
+            lines.append(current)
 
-        line_h = f.size + line_gap
-        start_y = y - ((len(lines) - 1) * line_h) / 2
+        if len(lines) > max_lines:
+            lines = lines[:max_lines]
+            lines[-1] = shorten_text(draw, lines[-1] + " ...", pixel_width, font)
+
+        line_h = font.size + round(2 * fs)
+        top = round(y * sy - (len(lines) - 1) * line_h / 2)
         for i, line in enumerate(lines):
-            draw.text((x, start_y + i * line_h), line,
-                      fill=get_dynamic_color(text), font=f)
+            draw.text(
+                (round(x * sx), top + i * line_h),
+                line, font=font, fill=dynamic_color(text), anchor="lm"
+            )
 
-    # Site / Rectifier / Battery: satu baris per field.
-    for i, (_, value) in enumerate(col_site):
-        draw_value(boxes['site']['x'], boxes['site']['y'] + i * boxes['site']['gap'],
-                   value, boxes['site']['max_width'])
+    # Mockup sudah berisi logo, icon, label, garis, colon, card, dll.
+    # Python hanya mengisi VALUE.
 
-    for i, (_, value) in enumerate(col_rect):
-        draw_value(boxes['rect']['x'], boxes['rect']['y'] + i * boxes['rect']['gap'],
-                   value, boxes['rect']['max_width'])
+    site_rows = [
+        value(row, "Site ID"),
+        value(row, "Site Name"),
+        value(row, "Regional"),
+        value(row, "NOP_1"),
+        value(row, "TO"),
+        value(row, "ROH"),
+        value(row, "Site Owner"),
+        f"{value(row, 'Lat')} / {value(row, 'Long')}",
+    ]
+    for text, y in zip(site_rows, [236, 292, 347, 403, 459, 515, 570, 625]):
+        write_value(text, 247, y, 215)
 
-    for i, (_, value) in enumerate(col_batt):
-        draw_value(boxes['batt']['x'], boxes['batt']['y'] + i * boxes['batt']['gap'],
-                   value, boxes['batt']['max_width'])
+    rect_rows = [
+        value(row, "ID PLN"),
+        f"{value(row, 'Daya PLN (KVA)')} kVA",
+        value(row, "Rectifier Brand (1)"),
+        value(row, "Rectifier Model (1)"),
+        value(row, "Module Capacity (1)"),
+        value(row, "Inserted Module Qty (1)"),
+        value(row, "Load System (1)"),
+    ]
+    for text, y in zip(rect_rows, [212, 257, 302, 346, 391, 436, 479]):
+        write_value(text, 783, y, 287)
 
-    # Health. SOW dibuat wrap agar tidak menabrak tepi kanan.
-    for i, (_, value) in enumerate(col_health):
-        y = boxes['health']['y'] + i * boxes['health']['gap']
-        if i == 5:  # SOW Act.
-            draw_wrapped_value(boxes['health']['x'], y, value,
-                               boxes['health']['max_width'], max_lines=2)
+    bbt = safe_float(row["BBT H (1)"]) if "BBT H (1)" in row.index else None
+    batt_rows = [
+        value(row, "Battery Brand (1)"),
+        value(row, "Battery Type (1)"),
+        value(row, "Battery Capacity (1)"),
+        value(row, "Battery Bank (1)"),
+        f"{bbt:.2f} Hours" if bbt is not None else "-",
+        value(row, "BBT Category (1)"),
+    ]
+    for text, y in zip(batt_rows, [609, 650, 691, 731, 771, 812]):
+        write_value(text, 783, y, 287, size=small_size)
+
+    utility = safe_float(row["Rectifier Utility"]) if "Rectifier Utility" in row.index else None
+    health_rows = [
+        value(row, "Rectifier Condition"),
+        f"{utility * 100:.1f} %" if utility is not None else "-",
+        value(row, "Rectifier Config (Category)"),
+        value(row, "Capacity Status"),
+        value(row, "Potensial Trip"),
+        value(row, "Activity (SOW) Actual"),
+        value(row, "EAS Validation"),
+        value(row, "NETECO Status"),
+    ]
+    for index, (text, y) in enumerate(zip(health_rows, [226, 281, 335, 390, 443, 497, 549, 604])):
+        # SOW sering panjang; gunakan 2 baris agar tetap terbaca.
+        if index == 5:
+            write_value(text, 1394, y, 225, size=small_size, minimum=10, max_lines=2)
         else:
-            draw_value(boxes['health']['x'], y, value, boxes['health']['max_width'])
+            write_value(text, 1394, y, 225, minimum=11)
 
-    # Action di area kosong bawah health panel.
-    action_y = boxes['health']['y'] + len(col_health) * boxes['health']['gap']
-    action_y += round(2 * sy)
-    draw_wrapped_value(boxes['health']['x'], action_y, action_list[0],
-                       boxes['health']['max_width'], max_lines=3)
+    # Action berada di area kosong setelah NETECO.
+    actions = build_actions(row)
+    for index, action in enumerate(actions[:3]):
+        write_value(action, 1394, 658 + index * 36, 225, size=small_size, minimum=10, max_lines=2)
 
-    # ========================================================
-    # FOOTER DATA UPDATE
-    # ========================================================
-    update_value = '-'
-    for col_name in ['Data Update', 'DATA UPDATE', 'Update Date', 'Last Update', 'Last Check Update']:
-        if col_name in site_data:
-            update_value = clean_value(site_data.get(col_name))
-            break
+    # Footer mockup
+    update = value(row, "Last Check Update")
+    footer_font = fit_font(
+        draw, f"Data Update : {update}", 300,
+        size=18, minimum=12, bold=True
+    )
+    draw.text(
+        xy(72, 890),
+        f"Data Update : {update}",
+        font=footer_font,
+        fill=(255, 255, 255),
+        anchor="lm",
+    )
 
-    if update_value == '-':
-        # Jangan menulis tanggal hari ini secara otomatis jika Excel tidak punya data.
-        update_value = '-'
-
-    # Label 'Data Update :' sudah ada di mockup. Jangan gambar ulang
-    # label tersebut karena akan menghasilkan teks dobel. Jika Excel
-    # punya tanggal update, hanya area nilai setelah ':' yang ditimpa.
-    if update_value != '-':
-        # Mockup sudah punya label dan tanda '-'. Hapus hanya tanda '-'
-        # dengan warna background lokal, lalu isi tanggal sesudah ':' .
-        cover_color = img.getpixel((round(220 * sx), round(892 * sy)))
-        draw.rectangle(
-            [round(188 * sx), round(878 * sy), round(216 * sx), round(906 * sy)],
-            fill=cover_color
-        )
-        draw.text((round(196 * sx), round(891 * sy)), str(update_value),
-                  fill=(255, 255, 255), font=footer_font)
-
-    output_path = f'output_{clean_filename(site_id)}.png'
-    img.save(output_path, dpi=(300, 300), quality=96)
+    output_path = f"output_{clean_filename(site_id)}.png"
+    img.save(output_path, format="PNG", dpi=(150, 150))
     return output_path
 
-
-# ============================================================
-# TELEGRAM
-# ============================================================
-@bot.message_handler(commands=['site'])
+@bot.message_handler(commands=["site"])
 def handle_site(message):
     args = message.text.split()
     if len(args) < 2:
-        bot.reply_to(message, '⚠️ Format salah! Gunakan: `/site <Site_ID>`', parse_mode='Markdown')
+        bot.reply_to(
+            message,
+            "⚠️ Format salah!\nGunakan: `/site <Site_ID>`",
+            parse_mode="Markdown",
+        )
         return
 
-    site_id = args[1]
-    bot.reply_to(message,
-                 f'⏳ Sedang memproses Site ID: *{site_id}*...',
-                 parse_mode='Markdown')
+    site_id = args[1].strip()
+    status_msg = bot.reply_to(
+        message,
+        f"⏳ Sedang memproses Site ID: *{site_id}*...",
+        parse_mode="Markdown",
+    )
 
     try:
         img_path = generate_site_card(site_id)
 
-        if img_path and os.path.exists(img_path):
-            with open(img_path, 'rb') as photo:
-                bot.send_photo(
-                    message.chat.id,
-                    photo,
-                    caption=f'✅ Status Report Site ID: *{site_id}*',
-                    parse_mode='Markdown'
-                )
-            os.remove(img_path)
-        else:
-            bot.reply_to(message,
-                         f'❌ Maaf, Site ID *{site_id}* tidak ditemukan.',
-                         parse_mode='Markdown')
+        if not img_path or not os.path.exists(img_path):
+            bot.edit_message_text(
+                f"❌ Site ID *{site_id}* tidak ditemukan.",
+                message.chat.id,
+                status_msg.message_id,
+                parse_mode="Markdown",
+            )
+            return
+
+        with open(img_path, "rb") as photo:
+            bot.send_photo(
+                message.chat.id,
+                photo,
+                caption=f"✅ Status Report Site ID: *{site_id}*",
+                parse_mode="Markdown",
+            )
+
+        os.remove(img_path)
+
+        try:
+            bot.delete_message(message.chat.id, status_msg.message_id)
+        except Exception:
+            pass
+
     except Exception as exc:
-        print(f'Error generate report {site_id}: {exc}')
-        bot.reply_to(message,
-                     f'❌ Terjadi error saat membuat report untuk *{site_id}*.',
-                     parse_mode='Markdown')
+        print(f"Error generate report {site_id}: {exc}")
+        try:
+            bot.edit_message_text(
+                f"❌ Terjadi error saat membuat report untuk *{site_id}*.\n`{exc}`",
+                message.chat.id,
+                status_msg.message_id,
+                parse_mode="Markdown",
+            )
+        except Exception:
+            bot.reply_to(
+                message,
+                f"❌ Terjadi error saat membuat report untuk *{site_id}*.",
+                parse_mode="Markdown",
+            )
 
-
-print('Bot Telegram siap dijalankan...')
+print("Bot Telegram siap dijalankan...")
 bot.infinity_polling(skip_pending=True)
