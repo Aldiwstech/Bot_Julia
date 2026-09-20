@@ -4,7 +4,7 @@ import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 
 # ============================================================
-# GENSET MODULE
+# GENSET MODULE — V5 FIXED LAYOUT
 # ------------------------------------------------------------
 # Module ini sengaja berdiri sendiri dari renderer Power/Rectifier.
 # Tidak mengubah /site atau logic Power.
@@ -28,8 +28,8 @@ MOCKUP_CANDIDATES = [
 
 # Reference = ukuran Mokupgenset.png yang sekarang.
 # Kalau ukuran mockup berubah, renderer mengikuti ukuran file aktual.
-BASE_W = 1671
-BASE_H = 941
+BASE_W = 1670
+BASE_H = 942
 
 NAVY = (24, 55, 105)
 RED = (211, 42, 50)
@@ -739,15 +739,27 @@ def generate_genset_card(site_id):
     # HEALTHY CHECK  colon ~ 1380 -> value X 1412
     # ACTION         text X 1230
     # ========================================================
-    SITE_VALUE_X = 270
-    SITE_VALUE_W = 202
+    # ========================================================
+    # V5 — VALUE ANCHORS LOCKED TO THE ACTUAL Mokupgenset.png
+    # ========================================================
+    # Colon positions measured from the current mockup:
+    #   Site Info      ~ X 254
+    #   Middle cards   ~ X 812
+    #   Healthy Check  ~ X 1410
+    #
+    # Value starts at a fixed offset after the colon.
+    # IMPORTANT: do NOT calculate X from label length.
+    # This keeps every row vertically aligned.
+    SITE_VALUE_X = 276
+    SITE_VALUE_W = 190
 
-    MID_VALUE_X = 830
-    MID_VALUE_W = 220
+    MID_VALUE_X = 834
+    MID_VALUE_W = 235
 
-    HEALTH_VALUE_X = 1412
+    HEALTH_VALUE_X = 1432
     HEALTH_VALUE_W = 205
 
+    # Action is a free-text list inside its own pink box.
     ACTION_VALUE_X = 1230
     ACTION_VALUE_W = 330
 
@@ -772,15 +784,16 @@ def generate_genset_card(site_id):
     # Dibuat per-row karena spacing mockup Site Info tidak benar-benar
     # seragam, terutama pada ROH -> Site Owner -> Lat/Long.
     # Y juga dikunci ke center setiap row pada mockup.
+    # Exact row centers from the current mockup.
     site_y = [
         231,  # Site ID
-        290,  # Site Name
-        349,  # Regional
-        409,  # NOP
-        468,  # TO
-        526,  # ROH
-        610,  # Site Owner
-        676,  # Lat / Long
+        293,  # Site Name
+        355,  # Regional
+        416,  # NOP
+        478,  # TO
+        539,  # ROH
+        600,  # Site Owner
+        661,  # Lat / Long
     ]
 
     for index, (text, y) in enumerate(
@@ -817,10 +830,10 @@ def generate_genset_card(site_id):
     ]
 
     autorate_y = [
-        213,
-        266,
-        320,
-        374,
+        214,
+        269,
+        323,
+        377,
     ]
 
     for text, y in zip(
@@ -853,8 +866,8 @@ def generate_genset_card(site_id):
     ]
 
     warming_y = [
-        522,
-        576,
+        523,
+        577,
     ]
 
     for text, y in zip(
@@ -891,9 +904,9 @@ def generate_genset_card(site_id):
     ]
 
     bbm_y = [
-        720,
-        774,
-        817,
+        719,
+        771,
+        815,
     ]
 
     for text, y in zip(
@@ -949,16 +962,20 @@ def generate_genset_card(site_id):
         "",  # Auto Date
     ]
 
+    # 10 rows — one Y anchor for EVERY Healthy Check row.
+    # The previous v4 had only 9 Y values, so Auto Date could
+    # silently lose its intended position.
     health_y = [
-        212,
-        266,
-        320,
-        374,
-        428,
-        482,
-        536,
-        590,
-        634,
+        210,  # Genset Health
+        254,  # DG Status
+        298,  # DG Condition
+        342,  # Current Week Condition
+        386,  # Problem Genset
+        430,  # RCA
+        476,  # Plan Action
+        523,  # Current Progress
+        570,  # PIC
+        616,  # Auto Date
     ]
 
     for text, y in zip(
@@ -998,7 +1015,7 @@ def generate_genset_card(site_id):
     ACTION_X = ACTION_VALUE_X
     ACTION_W = ACTION_VALUE_W
 
-    action_y = 754
+    action_y = 765
 
     for action in actions[:4]:
         write_action(
