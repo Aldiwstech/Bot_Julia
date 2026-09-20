@@ -15,7 +15,7 @@ MOCKUP_CANDIDATES = [
     # Final Power mockup: separate HEALTHY CHECK + ACTION panels.
     "wide_clean_infographic_dashboard_ui_mockup_on_a_l.png",
     "Mokup(2).png",
-    "Mokup(1).png", "Mokup.png", "mokup.png", "MokupPowerAction.png",
+    "Mokup(1).png", "Mokup.png", "mokup.png", "mokup(1).png",
     "a_clean_flat_vector_infographic_dashboard_templat.png",
     "Blank Telkomsel Huawei Dashboard Template.png"
 ]
@@ -211,6 +211,22 @@ def value(row, column, default="-"):
     return display_value(row[column], default)
 
 
+def excel_column_value(row, column_letter, default="-"):
+    """Read a value by its physical Excel column letter.
+
+    This is intentional for fields whose source position is fixed in the
+    workbook and should not change when the header/order changes.
+    """
+    try:
+        import openpyxl.utils
+        idx = openpyxl.utils.column_index_from_string(column_letter) - 1
+        if idx < 0 or idx >= len(row):
+            return default
+        return display_value(row.iloc[idx], default)
+    except Exception:
+        return default
+
+
 def format_voltage(value_):
     n = safe_float(value_)
     if n is None:
@@ -221,14 +237,8 @@ def format_voltage(value_):
 
 
 def phase_condition(row):
-    """
-    Rect. Cond is based on Phase Balanced, as agreed.
-    The source field remains the source of truth.
-    """
-    phase = value(row, "Phase Balanced")
-    if phase == "-":
-        return "-"
-    return phase
+    """Rect. Cond is sourced from physical Excel column BL."""
+    return excel_column_value(row, "BL")
 
 
 def rect_status(row):
@@ -270,7 +280,7 @@ def build_actions(row):
         actions.append("Need Check Onsite Connection NetEco")
 
     # 4) Rectifier.
-    rect_cond = value(row, "Rectifier Condition").upper()
+    rect_cond = excel_column_value(row, "BL").upper()
     rect1 = value(row, "RECT1_Status").upper()
     rect_config = value(row, "Rectifier Config (Category)").upper()
 
@@ -350,7 +360,7 @@ def generate_site_card(site_id):
         value(row, "Load System (1)"),
     ]
     for text, y in zip(rect_rows, [211, 257, 302, 348, 394, 440, 486]):
-        write_value(text, 820, y, 250, size=19)
+        write_value(text, 800, y, 270, size=19)
 
     # -------------------------
     # BATTERY STATUS
@@ -365,7 +375,7 @@ def generate_site_card(site_id):
         value(row, "BBT Category (1)"),
     ]
     for text, y in zip(batt_rows, [618, 661, 704, 746, 789, 830]):
-        write_value(text, 820, y, 250, size=18)
+        write_value(text, 800, y, 270, size=18)
 
     # -------------------------
     # HEALTHY CHECK & ACTION
@@ -396,16 +406,16 @@ def generate_site_card(site_id):
     # The mockup's 9th row is reserved for generated Action.
     health_y = [210, 257, 304, 351, 398, 445, 492, 539]
     for text, y in zip(health_values, health_y):
-        write_value(text, 1410, y, 220, size=16)
+        write_value(text, 1429, y, 200, size=16)
 
     # ACTION is a dedicated panel in the final mockup. The template already
     # provides the panel, so only the generated instructions are drawn here.
     actions = build_actions(row)
-    action_x = round(1240 * sx)
-    action_y = round(700 * sy)
-    action_w = round(355 * sx)
+    action_x = round(1175 * sx)
+    action_y = round(704 * sy)
+    action_w = round(410 * sx)
     action_font = fit_font(draw, "Need Check Onsite Connection NetEco", action_w,
-                           size=15, minimum=12, bold=True)
+                           size=18, minimum=13, bold=True)
     if not actions:
         actions = ["No action required"]
         action_color = GREEN
@@ -418,8 +428,8 @@ def generate_site_card(site_id):
         line_h = bbox[3] - bbox[1]
         for line in lines:
             draw.text((action_x, action_y), line, font=action_font, fill=action_color, anchor="la")
-            action_y += line_h + 3
-        action_y += 7
+            action_y += line_h + 4
+        action_y += 8
         if action_y > round(825 * sy):
             break
 
