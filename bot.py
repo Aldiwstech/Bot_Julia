@@ -11,11 +11,22 @@ if not TOKEN:
 bot = telebot.TeleBot(TOKEN)
 
 EXCEL_CANDIDATES = ["Excel_master.xlsx", "Excel_master(1).xlsx"]
-MOCKUP_CANDIDATES = ["Mokup.png", "mokup.png", "mokup(1).png", "Mokup(1).png"]
+MOCKUP_CANDIDATES = [
+    "Mokup.png", "mokup.png", "mokup(1).png", "Mokup(1).png",
+    "Blank Telkomsel Huawei Dashboard Template.png"
+]
 
-# Mockup final yang Anda upload: 1672 x 941 px
+# Final mockup coordinate system: 1672 x 941.
 BASE_W = 1672
 BASE_H = 941
+
+# Text colors are deliberately explicit; Action is always red.
+NAVY = (24, 55, 105)
+RED = (211, 42, 50)
+GREEN = (20, 142, 68)
+ORANGE = (232, 142, 18)
+WHITE = (255, 255, 255)
+
 
 def get_font(size, bold=False):
     candidates = []
@@ -23,20 +34,21 @@ def get_font(size, bold=False):
     if env_path:
         candidates.append(env_path)
 
-    if bold:
-        candidates += [
+    candidates += (
+        [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
             "DejaVuSans-Bold.ttf",
             "LiberationSans-Bold.ttf",
         ]
-    else:
-        candidates += [
+        if bold else
+        [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
             "DejaVuSans.ttf",
             "LiberationSans-Regular.ttf",
         ]
+    )
 
     for path in candidates:
         if path and os.path.exists(path):
@@ -46,22 +58,17 @@ def get_font(size, bold=False):
                 pass
     return ImageFont.load_default()
 
+
 def find_existing(candidates):
     for path in candidates:
         if os.path.exists(path):
             return path
     return None
 
+
 def clean_filename(text):
     return re.sub(r"[^A-Za-z0-9._-]+", "_", str(text))
 
-def safe_float(value):
-    try:
-        if pd.isna(value):
-            return None
-        return float(str(value).strip().replace(",", "."))
-    except Exception:
-        return None
 
 def is_empty(value):
     if value is None:
@@ -71,67 +78,59 @@ def is_empty(value):
             return True
     except Exception:
         pass
-    return str(value).strip().lower() in ("", "nan", "none", "-")
+    return str(value).strip().lower() in ("", "nan", "none", "-", "nat")
+
 
 def display_value(value, default="-"):
-    if is_empty(value):
-        return default
-    return str(value).strip()
+    return default if is_empty(value) else str(value).strip()
 
-def fit_font(draw, text, max_width, size=21, minimum=12, bold=True):
-    current = size
-    while current > minimum:
+
+def safe_float(value):
+    try:
+        if pd.isna(value):
+            return None
+        return float(str(value).strip().replace(",", "."))
+    except Exception:
+        return None
+
+
+def fit_font(draw, text, max_width, size=21, minimum=11, bold=True):
+    text = str(text)
+    current = int(size)
+    minimum = int(minimum)
+    while current >= minimum:
         font = get_font(current, bold=bold)
-        bbox = draw.textbbox((0, 0), str(text), font=font)
+        bbox = draw.textbbox((0, 0), text, font=font)
         if bbox[2] - bbox[0] <= max_width:
             return font
         current -= 1
     return get_font(minimum, bold=bold)
 
-def shorten_text(draw, text, max_width, font):
-    """Potong teks dengan ... agar tidak keluar dari area card."""
-    text = str(text)
-    if draw.textbbox((0, 0), text, font=font)[2] <= max_width:
-        return text
-
-    suffix = "..."
-    lo, hi = 0, len(text)
-    while lo < hi:
-        mid = (lo + hi + 1) // 2
-        candidate = text[:mid].rstrip() + suffix
-        if draw.textbbox((0, 0), candidate, font=font)[2] <= max_width:
-            lo = mid
-        else:
-            hi = mid - 1
-    return text[:lo].rstrip() + suffix
-
 
 def dynamic_color(value):
+    """Color for ordinary values. UNMONITOR is checked before MONITOR."""
     text = str(value).strip().upper()
 
-    red_words = (
-        "CRITICAL", "DOWN", "NOT AVAILABLE", "NOT_AVAILABLE",
-        "NEED", "TRIP", "PERGANTIAN", "FAULT", "FAILED",
-        "ERROR", "NO BACKUP",
-    )
-    orange_words = (
-        "WARNING", "POTENSIAL", "POTENTIAL", "MEDIUM",
-        "FAIR", "LOW", "CHECK",
-    )
-    green_words = (
-        "NORMAL", "SECURED", "OK", "VALID", "AVAILABLE",
-        "MONITOR", "SAFE",
-    )
+    # IMPORTANT: UNMONITOR contains MONITOR, so check it first.
+    if text == "UNMONITOR":
+        return RED
+    if text in ("NOT AVAILABLE", "NOT_AVAILABLE"):
+        return RED
 
-    if any(word in text for word in red_words):
-        return (211, 42, 50)
-    if any(word in text for word in orange_words):
-        return (232, 142, 18)
-    if any(word in text for word in green_words):
-        return (20, 142, 68)
-    return (24, 55, 105)
+    if any(w in text for w in ("CRITICAL", "DOWN", "NEED", "TRIP", "FAULT",
+                               "FAILED", "ERROR", "NO BACKUP", "UNBALANCE",
+                               "UNBALANCED")):
+        return RED
+    if any(w in text for w in ("POTENSIAL", "POTENTIAL", "WARNING", "CHECK")):
+        return ORANGE
+    if any(w in text for w in ("NORMAL", "SECURED", "OK", "VALID",
+                               "AVAILABLE", "MONITOR", "SAFE", "BALANCE",
+                               "BALANCED")):
+        return GREEN
+    return NAVY
 
-def load_site(site_id):
+
+def load_dataframe():
     excel_path = find_existing(EXCEL_CANDIDATES)
     if not excel_path:
         raise FileNotFoundError("Excel_master.xlsx tidak ditemukan.")
@@ -139,44 +138,99 @@ def load_site(site_id):
     df = pd.read_excel(excel_path, sheet_name="Rectifire&battery")
     if "Site ID" not in df.columns:
         raise KeyError("Kolom 'Site ID' tidak ditemukan.")
+    return df
 
+
+def load_site(site_id):
+    df = load_dataframe()
     wanted = str(site_id).strip().upper()
     ids = df["Site ID"].astype(str).str.strip().str.upper()
     result = df.loc[ids == wanted]
-
     return None if result.empty else result.iloc[0]
+
 
 def value(row, column, default="-"):
     if column not in row.index:
         return default
     return display_value(row[column], default)
 
+
+def format_voltage(value_):
+    n = safe_float(value_)
+    if n is None:
+        return "-"
+    if abs(n - round(n)) < 1e-9:
+        return f"{int(round(n))} V"
+    return f"{n:.1f} V"
+
+
+def phase_condition(row):
+    """
+    Rect. Cond is based on Phase Balanced, as agreed.
+    The source field remains the source of truth.
+    """
+    phase = value(row, "Phase Balanced")
+    if phase == "-":
+        return "-"
+    return phase
+
+
+def rect_status(row):
+    """Direct source field for the Rect. Status row."""
+    return value(row, "RECT1_Status")
+
+
 def build_actions(row):
+    """
+    Action is a generated technical instruction, not an Excel field.
+    Multiple independent issues are retained.
+    """
     actions = []
 
-    for col in ("Action", "Activity (SOW) Actual"):
-        if col in row.index and not is_empty(row[col]):
-            text = str(row[col]).strip()
-            if text != "-":
-                actions.append(text)
-                break
+    # 1) PLN phase imbalance -> inspect individual phase voltage.
+    phase = value(row, "Phase Balanced").upper()
+    if phase in ("UNBALANCE", "UNBALANCED"):
+        voltages = {
+            "R": safe_float(row["Voltage R"]) if "Voltage R" in row.index else None,
+            "S": safe_float(row["Voltage S"]) if "Voltage S" in row.index else None,
+            "T": safe_float(row["Voltage T"]) if "Voltage T" in row.index else None,
+        }
+        zero_phases = [p for p, v in voltages.items() if v is not None and abs(v) < 1e-9]
 
+        if zero_phases:
+            phases = " & ".join(zero_phases)
+            actions.append(f"Check PLN Phase {phases} - Voltage 0V")
+        else:
+            actions.append("Check PLN Phase Balance / Voltage")
+
+    # 2) EAS.
     eas = value(row, "EAS Validation").upper()
+    if eas == "NEED VALIDATION":
+        actions.append("Need Check Onsite")
+
+    # 3) NetEco. Only the agreed UnMonitor rule is applied here.
     neteco = value(row, "NETECO Status").upper()
-    rect = value(row, "Rectifier Condition").upper()
+    if neteco == "UNMONITOR":
+        actions.append("Need Check Onsite Connection NetEco")
 
-    if "DOWN" in rect or "CRITICAL" in rect:
-        actions.append("NEED REPLACE RECTIFIER")
-    if "NEED" in eas or "VALIDATION" in eas:
-        actions.append("NEED VALIDATE")
-    if "NOT AVAILABLE" in neteco or "DOWN" in neteco:
-        actions.append("NEED CHECK NETECO")
+    # 4) Rectifier.
+    rect_cond = value(row, "Rectifier Condition").upper()
+    rect1 = value(row, "RECT1_Status").upper()
+    rect_config = value(row, "Rectifier Config (Category)").upper()
 
+    if "CRITICAL" in rect_cond:
+        actions.append("Need Check / Upgrade Rectifier")
+    elif "NEED CHECK" in rect1 or "NEED CHECK" in rect_config:
+        actions.append("Need Check Onsite Rectifier")
+
+    # De-duplicate while preserving rule order.
     unique = []
-    for item in actions:
-        if item not in unique:
-            unique.append(item)
-    return unique or ["NORMAL"]
+    for action in actions:
+        if action not in unique:
+            unique.append(action)
+
+    return unique
+
 
 def generate_site_card(site_id):
     row = load_site(site_id)
@@ -185,80 +239,56 @@ def generate_site_card(site_id):
 
     mockup_path = find_existing(MOCKUP_CANDIDATES)
     if not mockup_path:
-        raise FileNotFoundError("Mokup.png tidak ditemukan.")
+        raise FileNotFoundError("Mockup template tidak ditemukan.")
 
     img = Image.open(mockup_path).convert("RGB")
     sx = img.width / BASE_W
     sy = img.height / BASE_H
     draw = ImageDraw.Draw(img)
 
-    fs = min(sx, sy)
-    base_size = max(15, round(21 * fs))
-    small_size = max(13, round(18 * fs))
-
     def xy(x, y):
-        return (round(x * sx), round(y * sy))
+        return round(x * sx), round(y * sy)
 
-    def write_value(text, x, y, max_width, size=base_size, minimum=11, max_lines=1):
+    def write_value(text, x, y, max_width, size=21, color=None):
         text = display_value(text)
-        pixel_width = round(max_width * sx)
         font = fit_font(
-            draw, text, pixel_width,
-            size=round(size * fs), minimum=minimum, bold=True
+            draw,
+            text,
+            round(max_width * sx),
+            size=round(size * min(sx, sy)),
+            minimum=10,
+            bold=True,
+        )
+        draw.text(
+            xy(x, y),
+            text,
+            font=font,
+            fill=color if color is not None else dynamic_color(text),
+            anchor="lm",
         )
 
-        # Normal row: satu baris, diperkecil lalu dipotong aman jika perlu.
-        if max_lines == 1:
-            final_text = shorten_text(draw, text, pixel_width, font)
-            draw.text(
-                xy(x, y), final_text, font=font,
-                fill=dynamic_color(final_text), anchor="lm"
-            )
-            return
-
-        # Long text: wrap sampai maksimal max_lines baris.
-        words = text.split()
-        lines = []
-        current = ""
-        for word in words:
-            candidate = word if not current else current + " " + word
-            if draw.textbbox((0, 0), candidate, font=font)[2] <= pixel_width:
-                current = candidate
-            else:
-                if current:
-                    lines.append(current)
-                current = word
-        if current:
-            lines.append(current)
-
-        if len(lines) > max_lines:
-            lines = lines[:max_lines]
-            lines[-1] = shorten_text(draw, lines[-1] + " ...", pixel_width, font)
-
-        line_h = font.size + round(2 * fs)
-        top = round(y * sy - (len(lines) - 1) * line_h / 2)
-        for i, line in enumerate(lines):
-            draw.text(
-                (round(x * sx), top + i * line_h),
-                line, font=font, fill=dynamic_color(text), anchor="lm"
-            )
-
-    # Mockup sudah berisi logo, icon, label, garis, colon, card, dll.
-    # Python hanya mengisi VALUE.
-
+    # -------------------------
+    # SITE INFO
+    # -------------------------
     site_rows = [
         value(row, "Site ID"),
         value(row, "Site Name"),
         value(row, "Regional"),
-        value(row, "NOP_1"),
+        value(row, "NOP"),
         value(row, "TO"),
         value(row, "ROH"),
         value(row, "Site Owner"),
         f"{value(row, 'Lat')} / {value(row, 'Long')}",
     ]
-    for text, y in zip(site_rows, [236, 292, 347, 403, 459, 515, 570, 625]):
-        write_value(text, 247, y, 215)
+    for i, (text, y) in enumerate(zip(site_rows, [236, 291, 346, 400, 455, 510, 575, 634])):
+        site_size = 20
+        if i in (1, 7):  # Site Name / Lat-Long
+            site_size = 19
+        write_value(text, 270, y, 195, size=site_size)
 
+    # -------------------------
+    # RECTIFIER & PLN
+    # -------------------------
     rect_rows = [
         value(row, "ID PLN"),
         f"{value(row, 'Daya PLN (KVA)')} kVA",
@@ -269,8 +299,11 @@ def generate_site_card(site_id):
         value(row, "Load System (1)"),
     ]
     for text, y in zip(rect_rows, [212, 257, 302, 346, 391, 436, 479]):
-        write_value(text, 783, y, 287)
+        write_value(text, 790, y, 275)
 
+    # -------------------------
+    # BATTERY STATUS
+    # -------------------------
     bbt = safe_float(row["BBT H (1)"]) if "BBT H (1)" in row.index else None
     batt_rows = [
         value(row, "Battery Brand (1)"),
@@ -280,49 +313,67 @@ def generate_site_card(site_id):
         f"{bbt:.2f} Hours" if bbt is not None else "-",
         value(row, "BBT Category (1)"),
     ]
-    for text, y in zip(batt_rows, [609, 650, 691, 731, 771, 812]):
-        write_value(text, 783, y, 287, size=small_size)
+    for text, y in zip(batt_rows, [610, 651, 692, 732, 772, 812]):
+        write_value(text, 790, y, 275, size=18)
 
+    # -------------------------
+    # HEALTHY CHECK & ACTION
+    # 9 rows in the final mockup:
+    # Rect. Cond / Utility / Config / Cap. Status / PLN Voltage /
+    # EAS Valid. / NETECO Stat / Rect. Status / Action
+    # -------------------------
     utility = safe_float(row["Rectifier Utility"]) if "Rectifier Utility" in row.index else None
-    health_rows = [
-        value(row, "Rectifier Condition"),
-        f"{utility * 100:.1f} %" if utility is not None else "-",
+    utility_text = f"{utility * 100:.1f} %" if utility is not None else "-"
+
+    voltage_text = " / ".join([
+        f"R {format_voltage(row['Voltage R'])}" if "Voltage R" in row.index else "R -",
+        f"S {format_voltage(row['Voltage S'])}" if "Voltage S" in row.index else "S -",
+        f"T {format_voltage(row['Voltage T'])}" if "Voltage T" in row.index else "T -",
+    ])
+
+    health_values = [
+        phase_condition(row),
+        utility_text,
         value(row, "Rectifier Config (Category)"),
         value(row, "Capacity Status"),
-        value(row, "Potensial Trip"),
-        value(row, "Activity (SOW) Actual"),
+        voltage_text,
         value(row, "EAS Validation"),
         value(row, "NETECO Status"),
+        rect_status(row),
     ]
-    for index, (text, y) in enumerate(zip(health_rows, [226, 281, 335, 390, 443, 497, 549, 604])):
-        # SOW sering panjang; gunakan 2 baris agar tetap terbaca.
-        if index == 5:
-            write_value(text, 1394, y, 225, size=small_size, minimum=10, max_lines=2)
-        else:
-            write_value(text, 1394, y, 225, minimum=11)
 
-    # Action berada di area kosong setelah NETECO.
+    # The mockup's 9th row is reserved for generated Action.
+    health_y = [229, 283, 337, 391, 445, 499, 553, 611]
+    for text, y in zip(health_values, health_y):
+        write_value(text, 1392, y, 220, size=18)
+
+    # Action is ALWAYS red, per the agreed design.
+    # Keep each instruction inside the right-panel value area.
     actions = build_actions(row)
-    for index, action in enumerate(actions[:3]):
-        write_value(action, 1394, 658 + index * 36, 225, size=small_size, minimum=10, max_lines=2)
+    if not actions:
+        actions = ["-"]
 
-    # Footer mockup
-    update = value(row, "Last Check Update")
-    footer_font = fit_font(
-        draw, f"Data Update : {update}", 300,
-        size=18, minimum=12, bold=True
-    )
-    draw.text(
-        xy(72, 890),
-        f"Data Update : {update}",
-        font=footer_font,
-        fill=(255, 255, 255),
-        anchor="lm",
-    )
+    action_y = 667
+    action_max_width = 225
+    for action in actions[:3]:
+        # Fit each action independently. Long instructions shrink only
+        # their own font instead of changing the rest of the dashboard.
+        write_value(
+            action,
+            1392,
+            action_y,
+            action_max_width,
+            size=16,
+            color=RED,
+        )
+        action_y += 25
+
+    # Intentionally no "Data Update / Last Check" footer text.
 
     output_path = f"output_{clean_filename(site_id)}.png"
     img.save(output_path, format="PNG", dpi=(150, 150))
     return output_path
+
 
 @bot.message_handler(commands=["site"])
 def handle_site(message):
@@ -384,6 +435,7 @@ def handle_site(message):
                 f"❌ Terjadi error saat membuat report untuk *{site_id}*.",
                 parse_mode="Markdown",
             )
+
 
 print("Bot Telegram siap dijalankan...")
 bot.infinity_polling(skip_pending=True)
