@@ -16,7 +16,7 @@ MOCKUP_CANDIDATES = [
     "MokupPowerAction.png",
     "power_mockup.png",
     "wide_clean_infographic_dashboard_ui_mockup_on_a_l.png",
-    "Mokup(2).png",
+    "Mokupnew.png",
     "Mokup(1).png", "Mokup.png", "mokup.png", "mokup(1).png",
     "wide_clean_infographic_dashboard_ui_image_in_a_fla.png",
     "a_clean_flat_vector_infographic_dashboard_templat.png",
