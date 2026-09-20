@@ -14,7 +14,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 EXCEL_CANDIDATES = ["Excel_master(1).xlsx", "Excel_master.xlsx"]
 MOCKUP_CANDIDATES = [
-    "Mokup.png", "mokup.png", "mokup(1).png", "Mokup(1).png",
+    "MokupPowerAction.png", "Mokup.png", "mokup.png", "mokup(1).png", "Mokup(1).png",
     "a_clean_flat_vector_infographic_dashboard_templat.png",
     "Blank Telkomsel Huawei Dashboard Template.png"
 ]
@@ -312,7 +312,7 @@ def generate_site_card(site_id):
         value(row, "Site Owner"),
         f"{value(row, 'Lat')} / {value(row, 'Long')}",
     ]
-    for i, (text, y) in enumerate(zip(site_rows, [236, 291, 346, 400, 455, 510, 575, 634])):
+    for i, (text, y) in enumerate(zip(site_rows, [236, 291, 350, 414, 477, 543, 610, 675])):
         site_size = 20
         site_width = 205
         if i == 7:  # Lat / Long is intentionally one point smaller.
@@ -350,10 +350,8 @@ def generate_site_card(site_id):
         write_value(text, 798, y, 270, size=18)
 
     # -------------------------
-    # HEALTHY CHECK & ACTION
-    # 9 rows in the final mockup:
-    # Rect. Cond / Utility / Config / Cap. Status / PLN Voltage /
-    # EAS Valid. / NETECO Stat / Rect. Status / Action
+    # HEALTHY CHECK
+    # Action is now a separate card, matching the Genset layout.
     # -------------------------
     utility = safe_float(row["Rectifier Utility"]) if "Rectifier Utility" in row.index else None
     utility_text = f"{utility * 100:.1f} %" if utility is not None else "-"
@@ -375,29 +373,25 @@ def generate_site_card(site_id):
         rect_status(row),
     ]
 
-    # The mockup's 9th row is reserved for generated Action.
-    health_y = [229, 283, 337, 391, 445, 499, 553, 611]
+    health_y = [213, 257, 301, 345, 389, 433, 477, 521]
     for text, y in zip(health_values, health_y):
         write_value(text, 1394, y, 220, size=18)
 
-    # Action is ALWAYS red, per the agreed design.
-    # Keep each instruction inside the right-panel value area.
+    # ACTION is a separate card in the new mockup. Keep all generated
+    # instructions red and place them inside the large action area.
     actions = build_actions(row)
-    if not actions:
-        actions = ["-"]
-
-    action_y = 671
-    action_max_width = 225
-    for action in actions[:3]:
+    action_y = 665
+    action_max_width = 405
+    for action in actions[:4]:
         write_value(
             f"- {action}",
-            1394,
+            1175,
             action_y,
             action_max_width,
-            size=12,
+            size=14,
             color=RED,
         )
-        action_y += 22
+        action_y += 27
 
     # Intentionally no "Data Update / Last Check" footer text.
 

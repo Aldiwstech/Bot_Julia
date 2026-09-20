@@ -203,6 +203,37 @@ def site_info(site_id):
     }
 
 
+
+def build_genset_actions(autorate, warming, bbm):
+    """Generate concise onsite instructions from the three selected sources."""
+    actions = []
+
+    dg_condition = row_value(autorate, "DG Condition", "").upper()
+    if dg_condition and dg_condition not in ("AUTO", "NORMAL", "OK", "SAFE"):
+        actions.append("Need Check Genset Auto")
+
+    dg_week = row_value(autorate, "Current Week Genset Condition", "").upper()
+    if dg_week and dg_week not in ("OK", "NORMAL", "SAFE", "GOOD", "ACTIVE"):
+        actions.append("Need Check Genset Condition")
+
+    warm_status = row_value(warming, "Warming Up Weekly Status", "").upper()
+    warm_week = row_value(warming, "Current Week Genset Condition", "").upper()
+    if warm_status and warm_status not in ("OK", "NORMAL", "SAFE", "GOOD", "ACTIVE"):
+        actions.append("Need Check Genset Warming Up")
+    elif warm_week and warm_week not in ("OK", "NORMAL", "SAFE", "GOOD", "ACTIVE"):
+        actions.append("Need Check Genset Warming Up")
+
+    bbm_status = row_value(bbm, "Status", "").upper()
+    if bbm_status and bbm_status not in ("SAFE", "NORMAL", "OK", "GOOD"):
+        suggestion = row_value(bbm, "Saran Pengisian", "").strip()
+        if suggestion and suggestion.upper() not in ("SAFE", "NORMAL", "OK", "GOOD", "-"):
+            actions.append(f"BBM: {suggestion}")
+        else:
+            actions.append("Need Check / Refill BBM Genset")
+
+    # Preserve order and remove duplicates.
+    return list(dict.fromkeys(actions))
+
 def generate_genset_card(site_id):
     data = load_genset_data(site_id)
     if data is None:
@@ -247,7 +278,7 @@ def generate_genset_card(site_id):
         info.get("Site Owner", "-"),
         info.get("Lat / Long", "-"),
     ]
-    for i, (text, y) in enumerate(zip(vals, [236, 291, 346, 400, 455, 510, 575, 634])):
+    for i, (text, y) in enumerate(zip(vals, [236, 291, 350, 414, 477, 543, 610, 675])):
         write(text, 270, y, 205, size=19 if i in (1, 7) else 20)
 
     # -------------------------
@@ -306,9 +337,13 @@ def generate_genset_card(site_id):
 
     # -------------------------
     # ACTION
-    # No action rule is invented yet. This section is deliberately blank
-    # until the user defines the genset action rules.
+    # Separate action card, matching the Power layout.
     # -------------------------
+    actions = build_genset_actions(autorate, warming, bbm)
+    action_y = 765
+    for action in actions[:4]:
+        write(action, 1220, action_y, 360, size=15, color=RED)
+        action_y += 27
 
     output = f"output_genset_{re.sub(r'[^A-Za-z0-9._-]+', '_', str(site_id))}.png"
     img.save(output, format="PNG", dpi=(150, 150))
