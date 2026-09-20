@@ -12,21 +12,20 @@ bot = telebot.TeleBot(TOKEN)
 
 EXCEL_CANDIDATES = ["Excel_master(1).xlsx", "Excel_master.xlsx"]
 MOCKUP_CANDIDATES = [
-    # Power mockup: keep the local/user-supplied blank template first.
-    # It must contain the 10 Site Info rows (including Class Site + VIP).
+    # Power template: allow explicit override first.
+    "MokupPowerAction.png",
+    "power_mockup.png",
     "wide_clean_infographic_dashboard_ui_mockup_on_a_l.png",
     "Mokup(2).png",
-    "Mokup(1).png", "Mokupnew.png", "mokup.png", "mokup(1).png",
-    "wide_clean_infographic_dashboard_ui_image_in_a_fla.png",
-    "Mokup(2).png",
     "Mokup(1).png", "Mokup.png", "mokup.png", "mokup(1).png",
+    "wide_clean_infographic_dashboard_ui_image_in_a_fla.png",
     "a_clean_flat_vector_infographic_dashboard_templat.png",
     "Blank Telkomsel Huawei Dashboard Template.png"
 ]
 
 # Final mockup coordinate system: 1672 x 941.
-BASE_W = 1683
-BASE_H = 935
+BASE_W = 1672
+BASE_H = 941
 
 # Text colors are deliberately explicit; Action is always red.
 NAVY = (24, 55, 105)
@@ -273,9 +272,12 @@ def phase_condition(row):
     If a future workbook moves the field and keeps the agreed physical ER
     position, ER is used as a fallback. This prevents silent column drift.
     """
-    if "Rectifier Condition" in row.index:
-        return value(row, "Rectifier Condition")
-    return excel_column_value(row, "ER")
+    # ER adalah sumber utama sesuai posisi kolom yang sudah dikunci.
+    er_value = excel_column_value(row, "ER")
+    if er_value not in ("", "-"):
+        return er_value
+    # Fallback hanya bila ER kosong.
+    return value(row, "Rectifier Condition")
 
 
 def rect_status(row):
@@ -364,9 +366,24 @@ def generate_site_card(site_id):
             anchor="lm",
         )
 
+    # =========================================================
+    # LOCKED VALUE COLUMNS
+    # Semua value dimulai pada X tetap setelah separator ":".
+    # Jangan memakai X berbeda per label.
+    # =========================================================
+    SITE_X = 304
+    SITE_W = 165
+    MID_X = 843
+    MID_W = 225
+    HEALTH_X = 1404
+    HEALTH_W = 220
+
     # -------------------------
     # SITE INFO
     # -------------------------
+    # Template power saat ini memakai 8 row Site Info.
+    # Jika template 10-row (Class Site + VIP) dipasang, kedua row
+    # tambahan otomatis diisi tanpa menggeser row lain.
     site_rows = [
         value(row, "Site ID"),
         value(row, "Site Name"),
@@ -380,14 +397,23 @@ def generate_site_card(site_id):
         f"{value(row, 'Lat')} / {value(row, 'Long')}",
     ]
 
-    # One fixed value column so every row starts at the same x-position
-    # immediately after the mockup's ':' separator.
-    site_y = [230, 286, 343, 400, 457, 514, 571, 628, 685, 742]
+    # Layout is selected explicitly. This avoids painting Class/VIP onto an
+    # older 8-row template. Set POWER_SITE_ROWS=10 when using the new mockup.
+    site_rows_mode = os.getenv("POWER_SITE_ROWS", "8").strip()
+    if site_rows_mode == "10":
+        site_y = [230, 286, 342, 398, 454, 510, 566, 622, 678, 734]
+    else:
+        site_rows = site_rows[:8]
+        site_y = [230, 286, 343, 400, 457, 514, 571, 628]
+
     for i, (text, y) in enumerate(zip(site_rows, site_y)):
-        site_size = 19
-        if i == 9:  # Lat / Long
-            site_size = 15
-        write_value(text, 304, y, 160, size=site_size)
+        if i == 9:
+            size = 15
+        elif i in (1, 7, 8):
+            size = 18
+        else:
+            size = 19
+        write_value(text, SITE_X, y, SITE_W, size=size, color=NAVY)
 
     # -------------------------
     # RECTIFIER & PLN
@@ -402,7 +428,7 @@ def generate_site_card(site_id):
         value(row, "Load System (1)"),
     ]
     for text, y in zip(rect_rows, [216, 263, 310, 357, 404, 451, 498]):
-        write_value(text, 843, y, 225, size=18)
+        write_value(text, MID_X, y, MID_W, size=18)
 
     # -------------------------
     # BATTERY STATUS
@@ -417,13 +443,10 @@ def generate_site_card(site_id):
         value(row, "BBT Category (1)"),
     ]
     for text, y in zip(batt_rows, [624, 669, 713, 758, 802, 846]):
-        write_value(text, 843, y, 225, size=17)
+        write_value(text, MID_X, y, MID_W, size=17)
 
     # -------------------------
-    # HEALTHY CHECK & ACTION
-    # 9 rows in the final mockup:
-    # Rect. Cond / Utility / Config / Cap. Status / PLN Voltage /
-    # EAS Valid. / NETECO Stat / Rect. Status / Action
+    # HEALTHY CHECK
     # -------------------------
     utility = safe_float(row["Rectifier Utility"]) if "Rectifier Utility" in row.index else None
     utility_text = f"{utility * 100:.1f} %" if utility is not None else "-"
@@ -444,29 +467,26 @@ def generate_site_card(site_id):
         value(row, "NETECO Status"),
         rect_status(row),
     ]
-
-    # The mockup's 9th row is reserved for generated Action.
     health_y = [216, 264, 311, 359, 406, 454, 501, 548]
     for idx, (text, y) in enumerate(zip(health_values, health_y)):
         if idx == 1:
-            # Utility: 0-60% green, >60% red.
-            write_value(text, 1404, y, 220, size=16, color=utility_color(utility))
+            write_value(text, HEALTH_X, y, HEALTH_W, size=16, color=utility_color(utility))
         else:
-            write_value(text, 1404, y, 220, size=16)
+            write_value(text, HEALTH_X, y, HEALTH_W, size=16)
 
-    # ACTION is a dedicated panel in the final mockup. The template already
-    # provides the panel, so only the generated instructions are drawn here.
+    # -------------------------
+    # ACTION
+    # -------------------------
     actions = build_actions(row)
-    action_x = round(1220 * sx)
-    action_y = round(728 * sy)
-    action_w = round(375 * sx)
     if not actions:
         actions = ["No action required"]
         action_color = GREEN
     else:
-        # Any generated action is a warning/instruction, therefore red.
         action_color = RED
 
+    action_x = round(1220 * sx)
+    action_y = round(728 * sy)
+    action_w = round(375 * sx)
     for action in actions[:3]:
         action_font = fit_font(
             draw, f"• {action}", action_w, size=17, minimum=12, bold=True
