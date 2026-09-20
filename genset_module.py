@@ -4,6 +4,8 @@ import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 
 # Genset module is intentionally isolated from the Power/Rectifier renderer.
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 EXCEL_CANDIDATES = ["Excel_master(1).xlsx", "Excel_master.xlsx"]
 MOCKUP_CANDIDATES = [
     "Mokupgenset.png",
@@ -21,17 +23,32 @@ ORANGE = (232, 142, 18)
 
 
 def find_existing(candidates):
-    # Use EXCEL_PATH when explicitly configured; otherwise use the
-    # most recently modified supported workbook so updated Excel files
-    # are automatically picked up by both Power and Genset modules.
     explicit = os.getenv("EXCEL_PATH")
-    if explicit and os.path.exists(explicit):
-        return explicit
+    if explicit:
+        if not os.path.isabs(explicit):
+            explicit = os.path.join(BASE_DIR, explicit)
+        if os.path.exists(explicit):
+            return explicit
 
-    existing = [p for p in candidates if os.path.exists(p)]
+    existing = []
+    for name in candidates:
+        path = name if os.path.isabs(name) else os.path.join(BASE_DIR, name)
+        if os.path.exists(path):
+            existing.append(path)
     if not existing:
         return None
     return max(existing, key=os.path.getmtime)
+
+
+def resolve_sheet_name(excel_path, wanted):
+    import openpyxl
+    wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
+    names = wb.sheetnames
+    target = str(wanted).strip().casefold()
+    for name in names:
+        if str(name).strip().casefold() == target:
+            return name
+    raise KeyError(f"Worksheet named '{wanted}' not found. Available: {names}")
 
 
 def is_empty(v):
@@ -122,7 +139,7 @@ def load_sheet(sheet_name):
     path = find_existing(EXCEL_CANDIDATES)
     if not path:
         raise FileNotFoundError("Excel_master.xlsx tidak ditemukan.")
-    return pd.read_excel(path, sheet_name=sheet_name)
+    return pd.read_excel(path, sheet_name=resolve_sheet_name(path, sheet_name))
 
 
 def find_site(df, site_id):

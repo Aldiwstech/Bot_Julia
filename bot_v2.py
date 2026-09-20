@@ -10,6 +10,8 @@ if not TOKEN:
 
 bot = telebot.TeleBot(TOKEN)
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 EXCEL_CANDIDATES = ["Excel_master(1).xlsx", "Excel_master.xlsx"]
 MOCKUP_CANDIDATES = [
     "Mokup.png", "mokup.png", "mokup(1).png", "Mokup(1).png",
@@ -63,17 +65,37 @@ def get_font(size, bold=False):
 
 
 def find_existing(candidates):
-    # Use EXCEL_PATH when explicitly configured; otherwise use the
-    # most recently modified supported workbook so updated Excel files
-    # are automatically picked up by both Power and Genset modules.
+    # Prefer an explicitly configured workbook. Otherwise search next to
+    # this script, so launching Python from another working directory is safe.
     explicit = os.getenv("EXCEL_PATH")
-    if explicit and os.path.exists(explicit):
-        return explicit
+    if explicit:
+        if not os.path.isabs(explicit):
+            explicit = os.path.join(BASE_DIR, explicit)
+        if os.path.exists(explicit):
+            return explicit
 
-    existing = [p for p in candidates if os.path.exists(p)]
+    existing = []
+    for name in candidates:
+        path = name if os.path.isabs(name) else os.path.join(BASE_DIR, name)
+        if os.path.exists(path):
+            existing.append(path)
     if not existing:
         return None
     return max(existing, key=os.path.getmtime)
+
+
+def resolve_sheet_name(excel_path, wanted):
+    # Excel sheet names are case-sensitive in pandas/openpyxl lookup.
+    # Resolve them case-insensitively so Rectifire&Battery and
+    # Rectifire&battery are treated as the same source sheet.
+    import openpyxl
+    wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
+    names = wb.sheetnames
+    target = str(wanted).strip().casefold()
+    for name in names:
+        if str(name).strip().casefold() == target:
+            return name
+    raise KeyError(f"Worksheet named '{wanted}' not found. Available: {names}")
 
 
 def clean_filename(text):
@@ -145,7 +167,7 @@ def load_dataframe():
     if not excel_path:
         raise FileNotFoundError("Excel_master.xlsx tidak ditemukan.")
 
-    df = pd.read_excel(excel_path, sheet_name="Rectifire&battery")
+    df = pd.read_excel(excel_path, sheet_name=resolve_sheet_name(excel_path, "Rectifire&Battery"))
     if "Site ID" not in df.columns:
         raise KeyError("Kolom 'Site ID' tidak ditemukan.")
     return df
