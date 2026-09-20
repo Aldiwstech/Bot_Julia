@@ -10,18 +10,19 @@ if not TOKEN:
 
 bot = telebot.TeleBot(TOKEN)
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
 EXCEL_CANDIDATES = ["Excel_master(1).xlsx", "Excel_master.xlsx"]
 MOCKUP_CANDIDATES = [
-    "MokupPowerAction.png", "Mokup.png", "mokup.png", "mokup(1).png", "Mokup(1).png",
+    # Final Power mockup: separate HEALTHY CHECK + ACTION panels.
+    "wide_clean_infographic_dashboard_ui_mockup_on_a_l.png",
+    "Mokup(2).png",
+    "Mokup(1).png", "Mokup.png", "mokup.png", "mokup(1).png",
     "a_clean_flat_vector_infographic_dashboard_templat.png",
     "Blank Telkomsel Huawei Dashboard Template.png"
 ]
 
 # Final mockup coordinate system: 1672 x 941.
-BASE_W = 1672
-BASE_H = 941
+BASE_W = 1683
+BASE_H = 935
 
 # Text colors are deliberately explicit; Action is always red.
 NAVY = (24, 55, 105)
@@ -65,37 +66,26 @@ def get_font(size, bold=False):
 
 
 def find_existing(candidates):
-    # Prefer an explicitly configured workbook. Otherwise search next to
-    # this script, so launching Python from another working directory is safe.
-    explicit = os.getenv("EXCEL_PATH")
-    if explicit:
-        if not os.path.isabs(explicit):
-            explicit = os.path.join(BASE_DIR, explicit)
-        if os.path.exists(explicit):
-            return explicit
-
-    existing = []
-    for name in candidates:
-        path = name if os.path.isabs(name) else os.path.join(BASE_DIR, name)
+    # Keep one source of truth. EXCEL_PATH can explicitly pin the workbook;
+    # otherwise the uploaded Excel_master(1).xlsx is preferred when present.
+    env_excel = os.getenv("EXCEL_PATH")
+    if env_excel and os.path.exists(env_excel):
+        return env_excel
+    for path in candidates:
         if os.path.exists(path):
-            existing.append(path)
-    if not existing:
-        return None
-    return max(existing, key=os.path.getmtime)
+            return path
+    return None
 
 
 def resolve_sheet_name(excel_path, wanted):
-    # Excel sheet names are case-sensitive in pandas/openpyxl lookup.
-    # Resolve them case-insensitively so Rectifire&Battery and
-    # Rectifire&battery are treated as the same source sheet.
-    import openpyxl
-    wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
-    names = wb.sheetnames
+    """Resolve worksheet names case-insensitively (e.g. Rectifire&Battery)."""
+    with pd.ExcelFile(excel_path) as book:
+        sheets = book.sheet_names
     target = str(wanted).strip().casefold()
-    for name in names:
-        if str(name).strip().casefold() == target:
-            return name
-    raise KeyError(f"Worksheet named '{wanted}' not found. Available: {names}")
+    for sheet in sheets:
+        if str(sheet).strip().casefold() == target:
+            return sheet
+    raise ValueError(f"Worksheet named '{wanted}' not found. Available: {', '.join(sheets)}")
 
 
 def clean_filename(text):
@@ -139,25 +129,58 @@ def fit_font(draw, text, max_width, size=21, minimum=11, bold=True):
     return get_font(minimum, bold=bold)
 
 
+def wrap_text(draw, text, font, max_width, max_lines=3):
+    """Word-wrap text without allowing it to collide with the panel edge."""
+    words = str(text).split()
+    if not words:
+        return []
+    lines = []
+    current = words[0]
+    for word in words[1:]:
+        candidate = current + " " + word
+        if draw.textbbox((0, 0), candidate, font=font)[2] <= max_width:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    lines.append(current)
+    if len(lines) <= max_lines:
+        return lines
+    # Keep the first max_lines-1 lines and fit the remainder with an ellipsis.
+    kept = lines[:max_lines-1]
+    remainder = " ".join(lines[max_lines-1:])
+    while remainder and draw.textbbox((0, 0), remainder + "...", font=font)[2] > max_width:
+        remainder = remainder[:-1].rstrip()
+    kept.append((remainder + "...") if remainder else "..." )
+    return kept
+
+
+def draw_wrapped(draw, text, x, y, max_width, font, color, line_gap=4, anchor="la"):
+    lines = wrap_text(draw, text, font, max_width, max_lines=3)
+    bbox = draw.textbbox((0, 0), "Ag", font=font)
+    line_h = bbox[3] - bbox[1]
+    for i, line in enumerate(lines):
+        draw.text((x, y + i * (line_h + line_gap)), line, font=font, fill=color, anchor=anchor)
+    return len(lines)
+
+
 def dynamic_color(value):
-    """Color for ordinary values. UNMONITOR is checked before MONITOR."""
+    """Status color with negative states checked before positive substrings."""
     text = str(value).strip().upper()
-
-    # IMPORTANT: UNMONITOR contains MONITOR, so check it first.
-    if text == "UNMONITOR":
+    if text in ("UNMONITOR", "NOT AVAILABLE", "NOT_AVAILABLE"):
         return RED
-    if text in ("NOT AVAILABLE", "NOT_AVAILABLE"):
-        return RED
-
-    if any(w in text for w in ("CRITICAL", "DOWN", "NEED", "TRIP", "FAULT",
-                               "FAILED", "ERROR", "NO BACKUP", "UNBALANCE",
-                               "UNBALANCED")):
+    if any(w in text for w in (
+        "UNBALANCE", "UNBALANCED", "NEED VALIDATION", "NEED CHECK",
+        "CRITICAL", "DOWN", "TRIP", "FAULT", "FAILED", "ERROR",
+        "NOT SAFE", "NOT AUTO", "BROKEN", "PROBLEM", "OFFLINE"
+    )):
         return RED
     if any(w in text for w in ("POTENSIAL", "POTENTIAL", "WARNING", "CHECK")):
         return ORANGE
-    if any(w in text for w in ("NORMAL", "SECURED", "OK", "VALID",
-                               "AVAILABLE", "MONITOR", "SAFE", "BALANCE",
-                               "BALANCED")):
+    if any(w in text for w in (
+        "NORMAL", "SECURED", "OK", "VALID", "AVAILABLE", "MONITOR",
+        "SAFE", "BALANCE", "BALANCED", "ACTIVE", "AUTO", "CLOSED"
+    )):
         return GREEN
     return NAVY
 
@@ -167,7 +190,8 @@ def load_dataframe():
     if not excel_path:
         raise FileNotFoundError("Excel_master.xlsx tidak ditemukan.")
 
-    df = pd.read_excel(excel_path, sheet_name=resolve_sheet_name(excel_path, "Rectifire&Battery"))
+    sheet = resolve_sheet_name(excel_path, "Rectifire&Battery")
+    df = pd.read_excel(excel_path, sheet_name=sheet)
     if "Site ID" not in df.columns:
         raise KeyError("Kolom 'Site ID' tidak ditemukan.")
     return df
@@ -281,20 +305,14 @@ def generate_site_card(site_id):
     def xy(x, y):
         return round(x * sx), round(y * sy)
 
-    def write_value(text, x, y, max_width, size=21, color=None):
+    def write_value(text, x, y, max_width, size=21, color=None, bold=True):
         text = display_value(text)
         font = fit_font(
-            draw,
-            text,
-            round(max_width * sx),
-            size=round(size * min(sx, sy)),
-            minimum=10,
-            bold=True,
+            draw, text, round(max_width * sx),
+            size=round(size * min(sx, sy)), minimum=10, bold=bold
         )
         draw.text(
-            xy(x, y),
-            text,
-            font=font,
+            xy(x, y), text, font=font,
             fill=color if color is not None else dynamic_color(text),
             anchor="lm",
         )
@@ -312,11 +330,11 @@ def generate_site_card(site_id):
         value(row, "Site Owner"),
         f"{value(row, 'Lat')} / {value(row, 'Long')}",
     ]
-    for i, (text, y) in enumerate(zip(site_rows, [236, 291, 350, 414, 477, 543, 610, 675])):
+    for i, (text, y) in enumerate(zip(site_rows, [231, 290, 349, 409, 468, 526, 610, 676])):
         site_size = 20
-        site_width = 205
+        site_width = 202
         if i == 7:  # Lat / Long is intentionally one point smaller.
-            site_size = 18
+            site_size = 17
         write_value(text, 270, y, site_width, size=site_size)
 
     # -------------------------
@@ -331,8 +349,8 @@ def generate_site_card(site_id):
         value(row, "Inserted Module Qty (1)"),
         value(row, "Load System (1)"),
     ]
-    for text, y in zip(rect_rows, [212, 257, 302, 346, 391, 436, 479]):
-        write_value(text, 798, y, 270, size=20)
+    for text, y in zip(rect_rows, [211, 257, 302, 348, 394, 440, 486]):
+        write_value(text, 820, y, 250, size=19)
 
     # -------------------------
     # BATTERY STATUS
@@ -346,12 +364,14 @@ def generate_site_card(site_id):
         f"{bbt:.2f} Hours" if bbt is not None else "-",
         value(row, "BBT Category (1)"),
     ]
-    for text, y in zip(batt_rows, [610, 651, 692, 732, 772, 812]):
-        write_value(text, 798, y, 270, size=18)
+    for text, y in zip(batt_rows, [618, 661, 704, 746, 789, 830]):
+        write_value(text, 820, y, 250, size=18)
 
     # -------------------------
-    # HEALTHY CHECK
-    # Action is now a separate card, matching the Genset layout.
+    # HEALTHY CHECK & ACTION
+    # 9 rows in the final mockup:
+    # Rect. Cond / Utility / Config / Cap. Status / PLN Voltage /
+    # EAS Valid. / NETECO Stat / Rect. Status / Action
     # -------------------------
     utility = safe_float(row["Rectifier Utility"]) if "Rectifier Utility" in row.index else None
     utility_text = f"{utility * 100:.1f} %" if utility is not None else "-"
@@ -373,25 +393,35 @@ def generate_site_card(site_id):
         rect_status(row),
     ]
 
-    health_y = [213, 257, 301, 345, 389, 433, 477, 521]
+    # The mockup's 9th row is reserved for generated Action.
+    health_y = [210, 257, 304, 351, 398, 445, 492, 539]
     for text, y in zip(health_values, health_y):
-        write_value(text, 1394, y, 220, size=18)
+        write_value(text, 1410, y, 220, size=16)
 
-    # ACTION is a separate card in the new mockup. Keep all generated
-    # instructions red and place them inside the large action area.
+    # ACTION is a dedicated panel in the final mockup. The template already
+    # provides the panel, so only the generated instructions are drawn here.
     actions = build_actions(row)
-    action_y = 665
-    action_max_width = 405
-    for action in actions[:4]:
-        write_value(
-            f"- {action}",
-            1175,
-            action_y,
-            action_max_width,
-            size=14,
-            color=RED,
-        )
-        action_y += 27
+    action_x = round(1240 * sx)
+    action_y = round(700 * sy)
+    action_w = round(355 * sx)
+    action_font = fit_font(draw, "Need Check Onsite Connection NetEco", action_w,
+                           size=15, minimum=12, bold=True)
+    if not actions:
+        actions = ["No action required"]
+        action_color = GREEN
+    else:
+        action_color = RED
+
+    for action in actions[:3]:
+        lines = wrap_text(draw, f"• {action}", action_font, action_w, max_lines=2)
+        bbox = draw.textbbox((0, 0), "Ag", font=action_font)
+        line_h = bbox[3] - bbox[1]
+        for line in lines:
+            draw.text((action_x, action_y), line, font=action_font, fill=action_color, anchor="la")
+            action_y += line_h + 3
+        action_y += 7
+        if action_y > round(825 * sy):
+            break
 
     # Intentionally no "Data Update / Last Check" footer text.
 
