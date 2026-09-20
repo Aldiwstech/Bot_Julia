@@ -12,10 +12,14 @@ bot = telebot.TeleBot(TOKEN)
 
 EXCEL_CANDIDATES = ["Excel_master(1).xlsx", "Excel_master.xlsx"]
 MOCKUP_CANDIDATES = [
-    # Final Power mockup: separate HEALTHY CHECK + ACTION panels.
+    # Power mockup: keep the local/user-supplied blank template first.
+    # It must contain the 10 Site Info rows (including Class Site + VIP).
     "wide_clean_infographic_dashboard_ui_mockup_on_a_l.png",
     "Mokup(2).png",
-    "Mokup(1).png", "Mokup.png", "mokup.png", "MokupPowerAction.png",
+    "Mokup(1).png", "Mokup.png", "mokup.png", "mokup(1).png",
+    "wide_clean_infographic_dashboard_ui_image_in_a_fla.png",
+    "Mokup(2).png",
+    "Mokup(1).png", "Mokup.png", "mokup.png", "mokup(1).png",
     "a_clean_flat_vector_infographic_dashboard_templat.png",
     "Blank Telkomsel Huawei Dashboard Template.png"
 ]
@@ -165,24 +169,50 @@ def draw_wrapped(draw, text, x, y, max_width, font, color, line_gap=4, anchor="l
 
 
 def dynamic_color(value):
-    """Status color with negative states checked before positive substrings."""
+    """Status color rules for the Power dashboard.
+
+    Green: Normal, Safe, Monitor, Valid, Balance/Balanced, etc.
+    Red: Warning, Unmonitor, Unavailable, Need Validation, faults, etc.
+    Utility percentage is handled by utility_color() below.
+    """
     text = str(value).strip().upper()
-    if text in ("UNMONITOR", "NOT AVAILABLE", "NOT_AVAILABLE"):
+
+    # Explicit negative states first so MONITOR never overrides UNMONITOR.
+    red_exact = {
+        "UNMONITOR", "UNAVAILABLE", "NOT AVAILABLE", "NOT_AVAILABLE",
+        "WARNING", "WARN", "NEED VALIDATION", "NEED CHECK",
+        "UNBALANCE", "UNBALANCED", "CRITICAL", "DOWN", "TRIP",
+        "FAULT", "FAILED", "ERROR", "NOT SAFE", "NOT AUTO",
+        "BROKEN", "PROBLEM", "OFFLINE",
+    }
+    if text in red_exact:
         return RED
+
     if any(w in text for w in (
-        "UNBALANCE", "UNBALANCED", "NEED VALIDATION", "NEED CHECK",
+        "UNMONITOR", "UNAVAILABLE", "NOT AVAILABLE", "WARNING",
+        "NEED VALIDATION", "NEED CHECK", "UNBALANCE", "UNBALANCED",
         "CRITICAL", "DOWN", "TRIP", "FAULT", "FAILED", "ERROR",
-        "NOT SAFE", "NOT AUTO", "BROKEN", "PROBLEM", "OFFLINE"
+        "NOT SAFE", "NOT AUTO", "BROKEN", "PROBLEM", "OFFLINE",
     )):
         return RED
-    if any(w in text for w in ("POTENSIAL", "POTENTIAL", "WARNING", "CHECK")):
-        return ORANGE
+
     if any(w in text for w in (
-        "NORMAL", "SECURED", "OK", "VALID", "AVAILABLE", "MONITOR",
-        "SAFE", "BALANCE", "BALANCED", "ACTIVE", "AUTO", "CLOSED"
+        "NORMAL", "SECURED", "SAFE", "VALID", "AVAILABLE",
+        "MONITOR", "BALANCE", "BALANCED", "ACTIVE", "AUTO", "OK",
     )):
         return GREEN
+
     return NAVY
+
+
+def utility_color(value):
+    """0-60% green; above 60% red, per dashboard rule."""
+    n = safe_float(value)
+    if n is None:
+        return NAVY
+    # Excel may store either 0.549 or 54.9.
+    pct = n * 100 if 0 <= n <= 1 else n
+    return GREEN if 0 <= pct <= 60 else RED
 
 
 def load_dataframe():
@@ -237,8 +267,15 @@ def format_voltage(value_):
 
 
 def phase_condition(row):
-    """Rect. Cond is sourced from physical Excel column BL."""
-    return excel_column_value(row, "BL")
+    """Return Rect. Cond from the workbook's Rectifier Condition field.
+
+    The current workbook exposes this as the named column "Rectifier Condition".
+    If a future workbook moves the field and keeps the agreed physical ER
+    position, ER is used as a fallback. This prevents silent column drift.
+    """
+    if "Rectifier Condition" in row.index:
+        return value(row, "Rectifier Condition")
+    return excel_column_value(row, "ER")
 
 
 def rect_status(row):
@@ -280,7 +317,7 @@ def build_actions(row):
         actions.append("Need Check Onsite Connection NetEco")
 
     # 4) Rectifier.
-    rect_cond = excel_column_value(row, "BL").upper()
+    rect_cond = phase_condition(row).upper()
     rect1 = value(row, "RECT1_Status").upper()
     rect_config = value(row, "Rectifier Config (Category)").upper()
 
@@ -334,18 +371,23 @@ def generate_site_card(site_id):
         value(row, "Site ID"),
         value(row, "Site Name"),
         value(row, "Regional"),
-        value(row, "NOP"),
+        value(row, "NOP_1"),
         value(row, "TO"),
         value(row, "ROH"),
         value(row, "Site Owner"),
+        value(row, "Class Site "),
+        value(row, "VIP"),
         f"{value(row, 'Lat')} / {value(row, 'Long')}",
     ]
-    for i, (text, y) in enumerate(zip(site_rows, [231, 290, 349, 409, 468, 526, 610, 676])):
-        site_size = 20
-        site_width = 202
-        if i == 7:  # Lat / Long is intentionally one point smaller.
-            site_size = 17
-        write_value(text, 270, y, site_width, size=site_size)
+
+    # One fixed value column so every row starts at the same x-position
+    # immediately after the mockup's ':' separator.
+    site_y = [230, 286, 343, 400, 457, 514, 571, 628, 685, 742]
+    for i, (text, y) in enumerate(zip(site_rows, site_y)):
+        site_size = 19
+        if i == 9:  # Lat / Long
+            site_size = 15
+        write_value(text, 304, y, 160, size=site_size)
 
     # -------------------------
     # RECTIFIER & PLN
@@ -359,8 +401,8 @@ def generate_site_card(site_id):
         value(row, "Inserted Module Qty (1)"),
         value(row, "Load System (1)"),
     ]
-    for text, y in zip(rect_rows, [211, 257, 302, 348, 394, 440, 486]):
-        write_value(text, 800, y, 270, size=19)
+    for text, y in zip(rect_rows, [216, 263, 310, 357, 404, 451, 498]):
+        write_value(text, 843, y, 225, size=18)
 
     # -------------------------
     # BATTERY STATUS
@@ -374,8 +416,8 @@ def generate_site_card(site_id):
         f"{bbt:.2f} Hours" if bbt is not None else "-",
         value(row, "BBT Category (1)"),
     ]
-    for text, y in zip(batt_rows, [618, 661, 704, 746, 789, 830]):
-        write_value(text, 800, y, 270, size=18)
+    for text, y in zip(batt_rows, [624, 669, 713, 758, 802, 846]):
+        write_value(text, 843, y, 225, size=17)
 
     # -------------------------
     # HEALTHY CHECK & ACTION
@@ -404,32 +446,38 @@ def generate_site_card(site_id):
     ]
 
     # The mockup's 9th row is reserved for generated Action.
-    health_y = [210, 257, 304, 351, 398, 445, 492, 539]
-    for text, y in zip(health_values, health_y):
-        write_value(text, 1429, y, 200, size=16)
+    health_y = [216, 264, 311, 359, 406, 454, 501, 548]
+    for idx, (text, y) in enumerate(zip(health_values, health_y)):
+        if idx == 1:
+            # Utility: 0-60% green, >60% red.
+            write_value(text, 1404, y, 220, size=16, color=utility_color(utility))
+        else:
+            write_value(text, 1404, y, 220, size=16)
 
     # ACTION is a dedicated panel in the final mockup. The template already
     # provides the panel, so only the generated instructions are drawn here.
     actions = build_actions(row)
-    action_x = round(1175 * sx)
-    action_y = round(704 * sy)
-    action_w = round(410 * sx)
-    action_font = fit_font(draw, "Need Check Onsite Connection NetEco", action_w,
-                           size=18, minimum=13, bold=True)
+    action_x = round(1220 * sx)
+    action_y = round(728 * sy)
+    action_w = round(375 * sx)
     if not actions:
         actions = ["No action required"]
         action_color = GREEN
     else:
+        # Any generated action is a warning/instruction, therefore red.
         action_color = RED
 
     for action in actions[:3]:
+        action_font = fit_font(
+            draw, f"• {action}", action_w, size=17, minimum=12, bold=True
+        )
         lines = wrap_text(draw, f"• {action}", action_font, action_w, max_lines=2)
         bbox = draw.textbbox((0, 0), "Ag", font=action_font)
         line_h = bbox[3] - bbox[1]
         for line in lines:
             draw.text((action_x, action_y), line, font=action_font, fill=action_color, anchor="la")
-            action_y += line_h + 4
-        action_y += 8
+            action_y += line_h + 3
+        action_y += 6
         if action_y > round(825 * sy):
             break
 
