@@ -28,8 +28,8 @@ MOCKUP_CANDIDATES = [
 
 # Reference = ukuran Mokupgenset.png yang sekarang.
 # Kalau ukuran mockup berubah, renderer mengikuti ukuran file aktual.
-BASE_W = 1670
-BASE_H = 942
+BASE_W = 1671
+BASE_H = 941
 
 NAVY = (24, 55, 105)
 RED = (211, 42, 50)
@@ -727,14 +727,29 @@ def generate_genset_card(site_id):
 
     # Site Info: posisi value dibuat konsisten tepat setelah ":".
     # Jangan terlalu jauh dari colon, dan jangan berubah-ubah antar row.
-    SITE_VALUE_X = 280
-    SITE_VALUE_W = 185
+    # ========================================================
+    # LOCKED VALUE COLUMNS
+    # --------------------------------------------------------
+    # Semua nilai dimulai dari X yang SAMA pada card masing-
+    # masing. X tidak boleh mengikuti panjang label.
+    # Posisi ini dikunci terhadap colon pada Mokupgenset.
+    #
+    # SITE INFO      colon ~ 238 -> value X 270
+    # GENSET MID     colon ~ 798 -> value X 830
+    # HEALTHY CHECK  colon ~ 1380 -> value X 1412
+    # ACTION         text X 1230
+    # ========================================================
+    SITE_VALUE_X = 270
+    SITE_VALUE_W = 202
 
-    MID_VALUE_X = 825
-    MID_VALUE_W = 245
+    MID_VALUE_X = 830
+    MID_VALUE_W = 220
 
-    HEALTH_VALUE_X = 1415
+    HEALTH_VALUE_X = 1412
     HEALTH_VALUE_W = 205
+
+    ACTION_VALUE_X = 1230
+    ACTION_VALUE_W = 330
 
     # --------------------------------------------------------
     # SITE INFO
@@ -756,15 +771,16 @@ def generate_genset_card(site_id):
     # Center tiap row mengikuti posisi ":" pada mockup.
     # Dibuat per-row karena spacing mockup Site Info tidak benar-benar
     # seragam, terutama pada ROH -> Site Owner -> Lat/Long.
+    # Y juga dikunci ke center setiap row pada mockup.
     site_y = [
-        238,  # Site ID
-        294,  # Site Name
+        231,  # Site ID
+        290,  # Site Name
         349,  # Regional
-        401,  # NOP
-        457,  # TO
-        512,  # ROH
-        590,  # Site Owner
-        649,  # Lat / Long
+        409,  # NOP
+        468,  # TO
+        526,  # ROH
+        610,  # Site Owner
+        676,  # Lat / Long
     ]
 
     for index, (text, y) in enumerate(
@@ -777,7 +793,7 @@ def generate_genset_card(site_id):
             SITE_VALUE_X,
             y,
             SITE_VALUE_W,
-            size=18 if index == 7 else 20,
+            size=17 if index == 7 else (19 if index == 1 else 20),
             color=NAVY,
             minimum=12,
         )
@@ -801,10 +817,10 @@ def generate_genset_card(site_id):
     ]
 
     autorate_y = [
-        214,
-        268,
-        322,
-        375,
+        213,
+        266,
+        320,
+        374,
     ]
 
     for text, y in zip(
@@ -838,7 +854,7 @@ def generate_genset_card(site_id):
 
     warming_y = [
         522,
-        578,
+        576,
     ]
 
     for text, y in zip(
@@ -876,7 +892,7 @@ def generate_genset_card(site_id):
 
     bbm_y = [
         720,
-        772,
+        774,
         817,
     ]
 
@@ -934,15 +950,15 @@ def generate_genset_card(site_id):
     ]
 
     health_y = [
-        210,
-        255,
-        300,
-        345,
-        390,
-        435,
-        480,
-        534,
-        579,
+        212,
+        266,
+        320,
+        374,
+        428,
+        482,
+        536,
+        590,
+        634,
     ]
 
     for text, y in zip(
@@ -979,10 +995,10 @@ def generate_genset_card(site_id):
 
     # Action tidak lagi menggunakan x=1230 yang membuat text
     # terlihat seperti menabrak colon mockup.
-    ACTION_X = 1215
-    ACTION_W = 355
+    ACTION_X = ACTION_VALUE_X
+    ACTION_W = ACTION_VALUE_W
 
-    action_y = 765
+    action_y = 754
 
     for action in actions[:4]:
         write_action(
@@ -990,10 +1006,10 @@ def generate_genset_card(site_id):
             ACTION_X,
             action_y,
             ACTION_W,
-            size=17,
+            size=16,
             color=action_color,
         )
-        action_y += 34
+        action_y += 30
 
     # --------------------------------------------------------
     # SAVE
