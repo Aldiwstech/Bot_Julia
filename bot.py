@@ -10,9 +10,12 @@ if not TOKEN:
 
 bot = telebot.TeleBot(TOKEN)
 
-EXCEL_CANDIDATES = ["Excel_master.xlsx", "Excel_master(1).xlsx"]
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+EXCEL_CANDIDATES = ["Excel_master(1).xlsx", "Excel_master.xlsx"]
 MOCKUP_CANDIDATES = [
     "Mokup.png", "mokup.png", "mokup(1).png", "Mokup(1).png",
+    "a_clean_flat_vector_infographic_dashboard_templat.png",
     "Blank Telkomsel Huawei Dashboard Template.png"
 ]
 
@@ -36,17 +39,19 @@ def get_font(size, bold=False):
 
     candidates += (
         [
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            # Liberation Sans is metrically close to Arial and matches the mockup
+            # much better than DejaVu Sans for the data values.
             "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
-            "DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "LiberationSans-Bold.ttf",
+            "DejaVuSans-Bold.ttf",
         ]
         if bold else
         [
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
-            "DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "LiberationSans-Regular.ttf",
+            "DejaVuSans.ttf",
         ]
     )
 
@@ -60,10 +65,37 @@ def get_font(size, bold=False):
 
 
 def find_existing(candidates):
-    for path in candidates:
+    # Prefer an explicitly configured workbook. Otherwise search next to
+    # this script, so launching Python from another working directory is safe.
+    explicit = os.getenv("EXCEL_PATH")
+    if explicit:
+        if not os.path.isabs(explicit):
+            explicit = os.path.join(BASE_DIR, explicit)
+        if os.path.exists(explicit):
+            return explicit
+
+    existing = []
+    for name in candidates:
+        path = name if os.path.isabs(name) else os.path.join(BASE_DIR, name)
         if os.path.exists(path):
-            return path
-    return None
+            existing.append(path)
+    if not existing:
+        return None
+    return max(existing, key=os.path.getmtime)
+
+
+def resolve_sheet_name(excel_path, wanted):
+    # Excel sheet names are case-sensitive in pandas/openpyxl lookup.
+    # Resolve them case-insensitively so Rectifire&Battery and
+    # Rectifire&battery are treated as the same source sheet.
+    import openpyxl
+    wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
+    names = wb.sheetnames
+    target = str(wanted).strip().casefold()
+    for name in names:
+        if str(name).strip().casefold() == target:
+            return name
+    raise KeyError(f"Worksheet named '{wanted}' not found. Available: {names}")
 
 
 def clean_filename(text):
@@ -135,7 +167,7 @@ def load_dataframe():
     if not excel_path:
         raise FileNotFoundError("Excel_master.xlsx tidak ditemukan.")
 
-    df = pd.read_excel(excel_path, sheet_name="Rectifire&battery")
+    df = pd.read_excel(excel_path, sheet_name=resolve_sheet_name(excel_path, "Rectifire&Battery"))
     if "Site ID" not in df.columns:
         raise KeyError("Kolom 'Site ID' tidak ditemukan.")
     return df
@@ -282,9 +314,10 @@ def generate_site_card(site_id):
     ]
     for i, (text, y) in enumerate(zip(site_rows, [236, 291, 346, 400, 455, 510, 575, 634])):
         site_size = 20
-        if i in (1, 7):  # Site Name / Lat-Long
-            site_size = 19
-        write_value(text, 270, y, 195, size=site_size)
+        site_width = 205
+        if i == 7:  # Lat / Long is intentionally one point smaller.
+            site_size = 18
+        write_value(text, 270, y, site_width, size=site_size)
 
     # -------------------------
     # RECTIFIER & PLN
@@ -299,7 +332,7 @@ def generate_site_card(site_id):
         value(row, "Load System (1)"),
     ]
     for text, y in zip(rect_rows, [212, 257, 302, 346, 391, 436, 479]):
-        write_value(text, 790, y, 275)
+        write_value(text, 798, y, 270, size=20)
 
     # -------------------------
     # BATTERY STATUS
@@ -314,7 +347,7 @@ def generate_site_card(site_id):
         value(row, "BBT Category (1)"),
     ]
     for text, y in zip(batt_rows, [610, 651, 692, 732, 772, 812]):
-        write_value(text, 790, y, 275, size=18)
+        write_value(text, 798, y, 270, size=18)
 
     # -------------------------
     # HEALTHY CHECK & ACTION
@@ -345,7 +378,7 @@ def generate_site_card(site_id):
     # The mockup's 9th row is reserved for generated Action.
     health_y = [229, 283, 337, 391, 445, 499, 553, 611]
     for text, y in zip(health_values, health_y):
-        write_value(text, 1392, y, 220, size=18)
+        write_value(text, 1394, y, 220, size=18)
 
     # Action is ALWAYS red, per the agreed design.
     # Keep each instruction inside the right-panel value area.
@@ -353,20 +386,18 @@ def generate_site_card(site_id):
     if not actions:
         actions = ["-"]
 
-    action_y = 667
+    action_y = 671
     action_max_width = 225
     for action in actions[:3]:
-        # Fit each action independently. Long instructions shrink only
-        # their own font instead of changing the rest of the dashboard.
         write_value(
-            action,
-            1392,
+            f"- {action}",
+            1394,
             action_y,
             action_max_width,
-            size=16,
+            size=12,
             color=RED,
         )
-        action_y += 25
+        action_y += 22
 
     # Intentionally no "Data Update / Last Check" footer text.
 
@@ -437,5 +468,9 @@ def handle_site(message):
             )
 
 
+from genset_module import register_genset_handler
+register_genset_handler(bot)
+
 print("Bot Telegram siap dijalankan...")
+print("Commands aktif: /site <Site_ID> dan /genset <Site_ID>")
 bot.infinity_polling(skip_pending=True)
