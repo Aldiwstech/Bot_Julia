@@ -716,7 +716,7 @@ def generate_genset_card(site_id):
     # --------------------------------------------------------
     #
     # Mockup:
-    # Site Info      ":" sekitar x=250 -> value x=265
+    # Site Info      ":" sekitar x=270 -> value x=280
     # Autorate       ":" sekitar x=800 -> value x=815
     # Warming Up     ":" sekitar x=800 -> value x=815
     # BBM            ":" sekitar x=800 -> value x=815
@@ -725,8 +725,10 @@ def generate_genset_card(site_id):
     # Semua row memakai X yang sama dalam card masing-masing.
     # --------------------------------------------------------
 
-    SITE_VALUE_X = 265
-    SITE_VALUE_W = 195
+    # Site Info: posisi value dibuat konsisten tepat setelah ":".
+    # Jangan terlalu jauh dari colon, dan jangan berubah-ubah antar row.
+    SITE_VALUE_X = 280
+    SITE_VALUE_W = 185
 
     MID_VALUE_X = 825
     MID_VALUE_W = 245
@@ -751,15 +753,18 @@ def generate_genset_card(site_id):
         info.get("Lat / Long", ""),
     ]
 
+    # Center tiap row mengikuti posisi ":" pada mockup.
+    # Dibuat per-row karena spacing mockup Site Info tidak benar-benar
+    # seragam, terutama pada ROH -> Site Owner -> Lat/Long.
     site_y = [
-        231,
-        291,
-        351,
-        410,
-        470,
-        529,
-        608,
-        675,
+        238,  # Site ID
+        294,  # Site Name
+        349,  # Regional
+        401,  # NOP
+        457,  # TO
+        512,  # ROH
+        590,  # Site Owner
+        649,  # Lat / Long
     ]
 
     for index, (text, y) in enumerate(
