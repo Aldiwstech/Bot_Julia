@@ -13,6 +13,7 @@ bot = telebot.TeleBot(TOKEN)
 EXCEL_CANDIDATES = ["Excel_master(1).xlsx", "Excel_master.xlsx"]
 MOCKUP_CANDIDATES = [
     # Power template: allow explicit override first.
+    "power_mockup_latest.png",
     "MokupPowerAction.png",
     "power_mockup.png",
     "wide_clean_infographic_dashboard_ui_mockup_on_a_l.png",
@@ -23,9 +24,9 @@ MOCKUP_CANDIDATES = [
     "Blank Telkomsel Huawei Dashboard Template.png"
 ]
 
-# Final mockup coordinate system: 1672 x 941.
-BASE_W = 1672
-BASE_H = 941
+# Power v5 uses the current 10-row mockup exactly.
+BASE_W = 1683
+BASE_H = 935
 
 # Text colors are deliberately explicit; Action is always red.
 NAVY = (24, 55, 105)
@@ -376,7 +377,7 @@ def generate_site_card(site_id):
     MID_X = 843
     MID_W = 225
     HEALTH_X = 1404
-    HEALTH_W = 220
+    HEALTH_W = 225
 
     # -------------------------
     # SITE INFO
@@ -399,7 +400,7 @@ def generate_site_card(site_id):
 
     # Layout is selected explicitly. This avoids painting Class/VIP onto an
     # older 8-row template. Set POWER_SITE_ROWS=10 when using the new mockup.
-    site_rows_mode = os.getenv("POWER_SITE_ROWS", "8").strip()
+    site_rows_mode = os.getenv("POWER_SITE_ROWS", "10").strip()
     if site_rows_mode == "10":
         site_y = [230, 286, 342, 398, 454, 510, 566, 622, 678, 734]
     else:
@@ -485,9 +486,9 @@ def generate_site_card(site_id):
         action_color = RED
 
     action_x = round(1220 * sx)
-    action_y = round(728 * sy)
-    action_w = round(375 * sx)
-    for action in actions[:3]:
+    action_y = round(733 * sy)
+    action_w = round(365 * sx)
+    for action in actions[:4]:
         action_font = fit_font(
             draw, f"• {action}", action_w, size=17, minimum=12, bold=True
         )
