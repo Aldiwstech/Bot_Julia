@@ -15,7 +15,7 @@ MOCKUP_CANDIDATES = [
     # Final Power mockup: separate HEALTHY CHECK + ACTION panels.
     "wide_clean_infographic_dashboard_ui_mockup_on_a_l.png",
     "Mokup(2).png",
-    "Mokup(1).png", "Mokup.png", "mokup.png", "mokup(1).png",
+    "Mokup(1).png", "Mokup.png", "mokup.png", "MokupPowerAction",
     "a_clean_flat_vector_infographic_dashboard_templat.png",
     "Blank Telkomsel Huawei Dashboard Template.png"
 ]
