@@ -4,8 +4,6 @@ import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 
 # Genset module is intentionally isolated from the Power/Rectifier renderer.
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
 EXCEL_CANDIDATES = ["Excel_master(1).xlsx", "Excel_master.xlsx"]
 MOCKUP_CANDIDATES = [
     "Mokupgenset.png",
@@ -23,32 +21,23 @@ ORANGE = (232, 142, 18)
 
 
 def find_existing(candidates):
-    explicit = os.getenv("EXCEL_PATH")
-    if explicit:
-        if not os.path.isabs(explicit):
-            explicit = os.path.join(BASE_DIR, explicit)
-        if os.path.exists(explicit):
-            return explicit
-
-    existing = []
-    for name in candidates:
-        path = name if os.path.isabs(name) else os.path.join(BASE_DIR, name)
-        if os.path.exists(path):
-            existing.append(path)
-    if not existing:
-        return None
-    return max(existing, key=os.path.getmtime)
+    env_excel = os.getenv("EXCEL_PATH")
+    if env_excel and os.path.exists(env_excel):
+        return env_excel
+    for p in candidates:
+        if os.path.exists(p):
+            return p
+    return None
 
 
 def resolve_sheet_name(excel_path, wanted):
-    import openpyxl
-    wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
-    names = wb.sheetnames
+    with pd.ExcelFile(excel_path) as book:
+        sheets = book.sheet_names
     target = str(wanted).strip().casefold()
-    for name in names:
-        if str(name).strip().casefold() == target:
-            return name
-    raise KeyError(f"Worksheet named '{wanted}' not found. Available: {names}")
+    for sheet in sheets:
+        if str(sheet).strip().casefold() == target:
+            return sheet
+    raise ValueError(f"Worksheet named '{wanted}' not found. Available: {', '.join(sheets)}")
 
 
 def is_empty(v):
@@ -91,12 +80,37 @@ def get_font(size, bold=True):
     return ImageFont.load_default()
 
 
-def fit_font(draw, text, max_width, size=20, minimum=11):
+def fit_font(draw, text, max_width, size=20, minimum=11, bold=True):
     for n in range(int(size), int(minimum) - 1, -1):
-        f = get_font(n, bold=True)
-        if draw.textbbox((0, 0), str(text), font=f)[2] <= max_width:
+        f = get_font(n, bold=bold)
+        bbox = draw.textbbox((0, 0), str(text), font=f)
+        if bbox[2] - bbox[0] <= max_width:
             return f
-    return get_font(minimum, bold=True)
+    return get_font(minimum, bold=bold)
+
+
+def wrap_text(draw, text, font, max_width, max_lines=2):
+    words = str(text).split()
+    if not words:
+        return []
+    lines = []
+    current = words[0]
+    for word in words[1:]:
+        candidate = current + " " + word
+        if draw.textbbox((0, 0), candidate, font=font)[2] <= max_width:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    lines.append(current)
+    if len(lines) <= max_lines:
+        return lines
+    kept = lines[:max_lines-1]
+    remainder = " ".join(lines[max_lines-1:])
+    while remainder and draw.textbbox((0, 0), remainder + "...", font=font)[2] > max_width:
+        remainder = remainder[:-1].rstrip()
+    kept.append((remainder + "...") if remainder else "..." )
+    return kept
 
 
 def shorten(draw, text, max_width, font):
@@ -119,17 +133,19 @@ def dynamic_color(v):
     t = str(v).strip().upper()
     if t in ("UNMONITOR", "NOT AVAILABLE", "NOT_AVAILABLE"):
         return RED
+    # Negative phrases must be checked before positive substrings (e.g.
+    # NOT AUTO must not inherit the green AUTO rule).
     if any(x in t for x in (
-        "NEED REFUEL", "NOT SAFE", "CRITICAL", "DOWN", "FAULT",
-        "FAILED", "ERROR", "NOT OK", "UNBALANCE", "UNBALANCED",
-        "PROBLEM",
+        "NOT AUTO", "BROKEN", "CRITICAL", "DOWN", "FAULT", "FAILED",
+        "ERROR", "NOT OK", "NOT SAFE", "UNBALANCE", "UNBALANCED",
+        "PROBLEM", "NEED CHECK", "NEED VALIDATION"
     )):
         return RED
     if any(x in t for x in ("WARNING", "CHECK", "FAIR", "LOW", "MEDIUM")):
         return ORANGE
     if any(x in t for x in (
-        "ACTIVE", "AUTO", "CLOSED", "OK", "SAFE", "NORMAL",
-        "SECURED", "VALID", "AVAILABLE", "MONITOR",
+        "ACTIVE", "AUTO", "CLOSED", "OK", "SAFE", "NORMAL", "SECURED",
+        "VALID", "AVAILABLE", "MONITOR", "BALANCE", "BALANCED"
     )):
         return GREEN
     return NAVY
@@ -139,7 +155,8 @@ def load_sheet(sheet_name):
     path = find_existing(EXCEL_CANDIDATES)
     if not path:
         raise FileNotFoundError("Excel_master.xlsx tidak ditemukan.")
-    return pd.read_excel(path, sheet_name=resolve_sheet_name(path, sheet_name))
+    sheet = resolve_sheet_name(path, sheet_name)
+    return pd.read_excel(path, sheet_name=sheet)
 
 
 def find_site(df, site_id):
@@ -203,36 +220,24 @@ def site_info(site_id):
     }
 
 
-
 def build_genset_actions(autorate, warming, bbm):
-    """Generate concise onsite instructions from the three selected sources."""
     actions = []
+    dg_status = row_value(autorate, "DG Status").upper()
+    dg_condition = row_value(autorate, "DG Condition").upper()
+    week_condition = row_value(autorate, "Current Week Genset Condition").upper()
+    warm_status = row_value(warming, "Warming Up Weekly Status").upper()
+    warm_week = row_value(warming, "Current Week Genset Condition").upper()
 
-    dg_condition = row_value(autorate, "DG Condition", "").upper()
-    if dg_condition and dg_condition not in ("AUTO", "NORMAL", "OK", "SAFE"):
+    if dg_condition == "NOT AUTO" or dg_status not in ("ACTIVE", "OK"):
         actions.append("Need Check Genset Auto")
-
-    dg_week = row_value(autorate, "Current Week Genset Condition", "").upper()
-    if dg_week and dg_week not in ("OK", "NORMAL", "SAFE", "GOOD", "ACTIVE"):
+    if week_condition in ("BROKEN", "NOT OK", "FAULT", "PROBLEM"):
         actions.append("Need Check Genset Condition")
-
-    warm_status = row_value(warming, "Warming Up Weekly Status", "").upper()
-    warm_week = row_value(warming, "Current Week Genset Condition", "").upper()
-    if warm_status and warm_status not in ("OK", "NORMAL", "SAFE", "GOOD", "ACTIVE"):
-        actions.append("Need Check Genset Warming Up")
-    elif warm_week and warm_week not in ("OK", "NORMAL", "SAFE", "GOOD", "ACTIVE"):
+    if warm_status in ("BROKEN", "NOT OK", "FAULT", "PROBLEM") or warm_week in ("BROKEN", "NOT OK", "FAULT", "PROBLEM"):
         actions.append("Need Check Genset Warming Up")
 
-    bbm_status = row_value(bbm, "Status", "").upper()
-    if bbm_status and bbm_status not in ("SAFE", "NORMAL", "OK", "GOOD"):
-        suggestion = row_value(bbm, "Saran Pengisian", "").strip()
-        if suggestion and suggestion.upper() not in ("SAFE", "NORMAL", "OK", "GOOD", "-"):
-            actions.append(f"BBM: {suggestion}")
-        else:
-            actions.append("Need Check / Refill BBM Genset")
-
-    # Preserve order and remove duplicates.
+    # Keep future BBM rules explicit; do not invent an action from a safe status.
     return list(dict.fromkeys(actions))
+
 
 def generate_genset_card(site_id):
     data = load_genset_data(site_id)
@@ -253,16 +258,26 @@ def generate_genset_card(site_id):
     def xy(x, y):
         return round(x * sx), round(y * sy)
 
-    def write(text, x, y, width, size=20, color=None):
+    def write(text, x, y, width, size=20, color=None, bold=True):
         text = display(text)
         px = round(width * sx)
-        font = fit_font(draw, text, px, size=round(size * min(sx, sy)), minimum=10)
+        font = fit_font(draw, text, px, size=round(size * min(sx, sy)), minimum=10, bold=bold)
         text = shorten(draw, text, px, font)
         draw.text(
             xy(x, y), text, font=font,
             fill=color if color is not None else dynamic_color(text),
             anchor="lm",
         )
+
+    def write_wrapped(text, x, y, width, size=15, color=RED, max_lines=3):
+        px = round(width * sx)
+        font = fit_font(draw, text, px, size=round(size * min(sx, sy)), minimum=11, bold=True)
+        lines = wrap_text(draw, text, font, px, max_lines=max_lines)
+        line_h = draw.textbbox((0, 0), "Ag", font=font)[3] - draw.textbbox((0, 0), "Ag", font=font)[1]
+        py = round(y * sy)
+        for line in lines:
+            draw.text((round(x * sx), py), line, font=font, fill=color, anchor="la")
+            py += line_h + round(4 * sy)
 
     # -------------------------
     # SITE INFO
@@ -278,8 +293,8 @@ def generate_genset_card(site_id):
         info.get("Site Owner", "-"),
         info.get("Lat / Long", "-"),
     ]
-    for i, (text, y) in enumerate(zip(vals, [236, 291, 350, 414, 477, 543, 610, 675])):
-        write(text, 270, y, 205, size=19 if i in (1, 7) else 20)
+    for i, (text, y) in enumerate(zip(vals, [231, 290, 349, 409, 468, 526, 610, 676])):
+        write(text, 270, y, 202, size=17 if i == 7 else (19 if i == 1 else 20))
 
     # -------------------------
     # 3 SOURCE CATEGORIES
@@ -295,14 +310,14 @@ def generate_genset_card(site_id):
         row_value(autorate, "Current Progress"),
     ]
     for text, y in zip(autorate_vals, [213, 266, 320, 374]):
-        write(text, 800, y, 270, size=18)
+        write(text, 830, y, 220, size=17)
 
     warming_vals = [
         row_value(warming, "Warming Up Weekly Status"),
         row_value(warming, "Current Week Genset Condition"),
     ]
     for text, y in zip(warming_vals, [522, 576]):
-        write(text, 800, y, 270, size=18)
+        write(text, 830, y, 220, size=17)
 
     bbm_vals = [
         row_value(bbm, "Perkiraan Sisa Fuel"),
@@ -310,7 +325,7 @@ def generate_genset_card(site_id):
         row_value(bbm, "Saran Pengisian"),
     ]
     for text, y in zip(bbm_vals, [720, 774, 817]):
-        write(text, 800, y, 270, size=17)
+        write(text, 830, y, 220, size=16)
 
     # -------------------------
     # HEALTHY CHECK
@@ -333,17 +348,22 @@ def generate_genset_card(site_id):
         # Blank unsupported rows instead of inserting "-" into the visual.
         if text == "-":
             continue
-        write(text, 1390, y, 220, size=16)
+        write(text, 1412, y, 205, size=15)
 
     # -------------------------
     # ACTION
-    # Separate action card, matching the Power layout.
+    # Separate action panel. Larger red text + wrapping keeps the instruction readable.
     # -------------------------
     actions = build_genset_actions(autorate, warming, bbm)
-    action_y = 765
-    for action in actions[:4]:
-        write(action, 1220, action_y, 360, size=15, color=RED)
-        action_y += 27
+    if not actions:
+        actions = ["No action required"]
+        action_color = GREEN
+    else:
+        action_color = RED
+    action_y = 754
+    for action in actions[:3]:
+        write_wrapped(f"• {action}", 1230, action_y, 330, size=16, color=action_color, max_lines=1)
+        action_y += 30
 
     output = f"output_genset_{re.sub(r'[^A-Za-z0-9._-]+', '_', str(site_id))}.png"
     img.save(output, format="PNG", dpi=(150, 150))
