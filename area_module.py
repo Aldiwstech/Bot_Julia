@@ -20,7 +20,7 @@ AREA_EXCEL_CANDIDATES = [
 
 AREA_MOCKUP_CANDIDATES = [
     "power_mockup_latest.png",
-    "Mokup.png",
+    "Mokupnew.png",
     "MokupPowerAction.png",
 ]
 
