@@ -22,11 +22,9 @@ EXCEL_CANDIDATES = [
 
 MOCKUP_CANDIDATES = [
     "mokupgensetnew.png",
-    "MokupGenset.png",
-    "mokupgenset.png",
 ]
 
-# Reference = ukuran Mokupgenset.png yang sekarang.
+# Reference = ukuran mokupgenset.png yang sekarang.
 # Kalau ukuran mockup berubah, renderer mengikuti ukuran file aktual.
 BASE_W = 1670
 BASE_H = 942
