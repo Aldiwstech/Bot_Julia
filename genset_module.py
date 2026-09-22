@@ -25,7 +25,7 @@ EXCEL_CANDIDATES = [
 ]
 
 MOCKUP_CANDIDATES = [
-    "mokupGensetnew.png",
+    "mokupgensetnew.png",
 ]
 
 BASE_W = 1670
