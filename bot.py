@@ -14,7 +14,7 @@ EXCEL_CANDIDATES = ["Excel_master(1).xlsx", "Excel_master.xlsx"]
 MOCKUP_CANDIDATES = [
     # Power template: allow explicit override first.
     "mokupgensetnew.png",
-    "mokuppower.png",
+    "mokup2.png",
     "power_mockup.png",
 ]
 
