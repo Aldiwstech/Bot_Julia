@@ -597,13 +597,14 @@ AREA_EXCEL_CANDIDATES = [
 ]
 
 AREA_MOCKUP_CANDIDATES = [
+    "MokupArea.png",
     "power_mockup_latest.png",
     "Mokup.png",
     "MokupPowerAction.png",
 ]
 
-BASE_W = 1683
-BASE_H = 935
+BASE_W = 1536
+BASE_H = 854
 
 NAVY = (24, 55, 105)
 RED = (211, 42, 50)
@@ -635,7 +636,7 @@ def find_mockup():
             return path
 
     raise FileNotFoundError(
-        "Mockup Power untuk /area tidak ditemukan."
+        "MokupArea.png / mockup Power untuk /area tidak ditemukan. Upload MokupArea.png ke Railway."
     )
 
 
@@ -733,7 +734,7 @@ def font(size, bold=True):
     return ImageFont.load_default()
 
 
-def fit_font(draw, text, max_width, size=18, minimum=11, bold=True):
+def fit_font(draw, text, max_width, size=18, minimum=16, bold=True):
     for n in range(size, minimum - 1, -1):
         f = font(n, bold=bold)
         if draw.textbbox((0, 0), str(text), font=f)[2] <= max_width:
@@ -817,7 +818,7 @@ def draw_value(draw, text, x, y, width, size=18, color=None):
         text,
         max_width,
         size=size,
-        minimum=11,
+        minimum=16,
         bold=True,
     )
 
@@ -867,12 +868,14 @@ def build_area_data(row):
     power = {
         "ID PLN": value(row, "ID PLN"),
         "Daya PLN": value(row, "Daya PLN (KVA)"),
-        "Phase": value(row, "Phase"),
-        "MCB": value(row, "MCB"),
+        "Brand": value(row, "Rectifier Brand (1)"),
+        "Model": value(row, "Rectifier Model (1)"),
+        "Capacity": value(row, "Module Capacity (1)"),
+        "Module Qty": value(row, "Inserted Module Qty (1)"),
+        "Load System": value(row, "Load System (1)"),
         "Voltage R": value(row, "Voltage R"),
         "Voltage S": value(row, "Voltage S"),
         "Voltage T": value(row, "Voltage T"),
-        "Utility PLN": value(row, "Utility PLN"),
         "Capacity Status": value(row, "Capacity Status"),
         "Phase Balanced": value(row, "Phase Balanced"),
     }
@@ -881,26 +884,26 @@ def build_area_data(row):
     # BATTERY
     # --------------------------------------------------------
     battery = {
-        "Battery Type": value(row, "Battery Type (1)"),
         "Battery Brand": value(row, "Battery Brand (1)"),
+        "Battery Type": value(row, "Battery Type (1)"),
         "Battery Capacity": value(row, "Battery Capacity (1)"),
         "Battery Bank": value(row, "Battery Bank (1)"),
         "BBT H": value(row, "BBT H (1)"),
         "BBT Category": value(row, "BBT Category (1)"),
-        "Battery Install": value(row, "Battery Install (1)"),
     }
 
     # --------------------------------------------------------
     # HEALTHY CHECK
     # --------------------------------------------------------
     health = {
-        "EAS Validation": value(row, "EAS Validation"),
-        "NETECO Status": value(row, "NETECO Status"),
         "Rectifier Condition": value(row, "Rectifier Condition"),
+        "Rectifier Utility": value(row, "Rectifier Utility"),
+        "Config": value(row, "Rectifier Config (Category)"),
         "Capacity Status": power["Capacity Status"],
         "Phase Balanced": power["Phase Balanced"],
-        "Rectifier Utility": value(row, "Rectifier Utility"),
-        "Last Check": value(row, "Last Check Update"),
+        "EAS Validation": value(row, "EAS Validation"),
+        "NETECO Status": value(row, "NETECO Status"),
+        "Rectifier Status": value(row, "RECT1_Status"),
     }
 
     # --------------------------------------------------------
@@ -981,218 +984,129 @@ def build_area_data(row):
 
 def render_area(site_id):
     row = load_area_row(site_id)
-
     if row is None:
         return None
 
     site, power, battery, health, actions = build_area_data(row)
-
     mockup = find_mockup()
     img = Image.open(mockup).convert("RGB")
     draw = ImageDraw.Draw(img)
 
+    # This Area mockup is fixed at 1536x854.  Work in the actual pixel
+    # coordinates so the value positions stay locked to the ':' separators.
     sx = img.width / BASE_W
     sy = img.height / BASE_H
 
-    def P(x, y):
-        return (round(x * sx), round(y * sy))
+    def draw_fixed(text, x, y, max_width, size=17, color=None):
+        text = str(text).strip()
+        if not text:
+            return
 
-    # --------------------------------------------------------
-    # FIXED ANCHORS
-    #
-    # These are card anchors, not label-dependent positions.
-    # All values in the same panel share one X.
-    # --------------------------------------------------------
+        # Keep the text readable: never reduce below 16 px on this mockup.
+        # If a value is too long, shorten it with an ellipsis instead of making
+        # the font tiny or moving the X position away from the ':'.
+        max_px = int(max_width * sx)
+        f = fit_font(draw, text, max_px, size=size, minimum=16, bold=True)
+        if draw.textbbox((0, 0), text, font=f)[2] > max_px:
+            shortened = text
+            while len(shortened) > 4 and draw.textbbox((0, 0), shortened + "...", font=f)[2] > max_px:
+                shortened = shortened[:-1]
+            text = shortened.rstrip() + "..."
 
-    SITE_X = 305
-    SITE_W = 255
-
-    POWER_X = 845
-    POWER_W = 270
-
-    HEALTH_X = 1410
-    HEALTH_W = 230
-
-    ACTION_X = 1215
-    ACTION_W = 390
-
-    # --------------------------------------------------------
-    # SITE INFO - 10 rows
-    # --------------------------------------------------------
-    site_values = [
-        site["Site ID"],
-        site["Site Name"],
-        site["Regional"],
-        site["NOP"],
-        site["TO"],
-        site["ROH"],
-        site["Site Owner"],
-        site["Class Site"],
-        site["VIP"],
-        site["Lat / Long"],
-    ]
-
-    site_y = [
-        208,
-        258,
-        308,
-        358,
-        408,
-        458,
-        508,
-        558,
-        608,
-        658,
-    ]
-
-    for text, y in zip(site_values, site_y):
-        draw_value(
-            draw,
+        draw.text(
+            (round(x * sx), round(y * sy)),
             text,
-            SITE_X * sx,
-            y * sy,
-            SITE_W * sx,
-            size=17,
-            color=NAVY,
+            font=f,
+            fill=color if color is not None else dynamic_color(text),
+            anchor="lm",
         )
 
-    # --------------------------------------------------------
-    # RECTIFIER & PLN
-    # --------------------------------------------------------
+    # Value X positions are fixed immediately after the ':' in this exact mockup.
+    SITE_X, SITE_W = 277, 150
+    POWER_X, POWER_W = 769, 205
+    HEALTH_X, HEALTH_W = 1280, 190
+
+    # ---------------- SITE INFO ----------------
+    site_values = [
+        site["Site ID"], site["Site Name"], site["Regional"], site["NOP"],
+        site["TO"], site["ROH"], site["Site Owner"], site["Class Site"],
+        site["VIP"], site["Lat / Long"],
+    ]
+    site_y = [210, 262, 313, 365, 414, 464, 514, 564, 615, 664]
+    for text, y in zip(site_values, site_y):
+        draw_fixed(text, SITE_X, y, SITE_W, size=18, color=NAVY)
+
+    # ---------------- RECTIFIER & PLN ----------------
     power_values = [
         power["ID PLN"],
-        power["Daya PLN"],
-        power["Phase"],
-        power["MCB"],
-        power["Voltage R"],
-        power["Voltage S"],
-        power["Voltage T"],
-        power["Utility PLN"],
-        power["Capacity Status"],
-        power["Phase Balanced"],
+        f'{power["Daya PLN"]} kVA' if power["Daya PLN"] not in ("", "-") else "-",
+        power["Brand"], power["Model"], power["Capacity"],
+        power["Module Qty"], power["Load System"],
     ]
-
-    power_y = [
-        205,
-        250,
-        295,
-        340,
-        385,
-        430,
-        475,
-        520,
-        565,
-        610,
-    ]
-
+    power_y = [198, 245, 291, 337, 383, 429, 468]
     for text, y in zip(power_values, power_y):
-        draw_value(
-            draw,
-            text,
-            POWER_X * sx,
-            y * sy,
-            POWER_W * sx,
-            size=16,
-        )
+        draw_fixed(text, POWER_X, y, POWER_W, size=17)
 
-    # --------------------------------------------------------
-    # BATTERY STATUS
-    # --------------------------------------------------------
+    # ---------------- BATTERY STATUS ----------------
+    bbt = safe_float(battery["BBT H"])
     battery_values = [
-        battery["Battery Type"],
         battery["Battery Brand"],
+        battery["Battery Type"],
         battery["Battery Capacity"],
         battery["Battery Bank"],
-        battery["BBT H"],
+        f"{bbt:.2f} Hours" if bbt is not None else battery["BBT H"],
         battery["BBT Category"],
-        battery["Battery Install"],
     ]
-
-    battery_y = [
-        695,
-        740,
-        785,
-        830,
-        875,
-        920,
-        965,
-    ]
-
-    # Clip rows that are outside a particular mockup version.
+    battery_y = [560, 608, 654, 701, 747, 786]
     for text, y in zip(battery_values, battery_y):
-        if y * sy >= img.height - 8:
-            continue
+        draw_fixed(text, POWER_X, y, POWER_W, size=17)
 
-        draw_value(
-            draw,
-            text,
-            POWER_X * sx,
-            y * sy,
-            POWER_W * sx,
-            size=15,
-        )
+    # ---------------- HEALTHY CHECK ----------------
+    utility_num = safe_float(health["Rectifier Utility"])
+    if utility_num is not None:
+        utility_pct = utility_num * 100 if 0 <= utility_num <= 1 else utility_num
+        utility_text = f"{utility_pct:.1f} %"
+    else:
+        utility_text = health["Rectifier Utility"]
 
-    # --------------------------------------------------------
-    # HEALTHY CHECK
-    # --------------------------------------------------------
+    voltage_text = " / ".join([
+        f'R {format_voltage(power["Voltage R"])}',
+        f'S {format_voltage(power["Voltage S"])}',
+        f'T {format_voltage(power["Voltage T"])}',
+    ])
+
     health_values = [
+        health["Rectifier Condition"],
+        utility_text,
+        health["Config"],
+        health["Capacity Status"],
+        voltage_text,
         health["EAS Validation"],
         health["NETECO Status"],
-        health["Rectifier Condition"],
-        health["Capacity Status"],
-        health["Phase Balanced"],
-        health["Rectifier Utility"],
-        health["Last Check"],
+        health["Rectifier Status"],
     ]
+    health_y = [198, 245, 291, 338, 384, 432, 478, 514]
+    for idx, (text, y) in enumerate(zip(health_values, health_y)):
+        color = utility_color(utility_num) if idx == 1 else dynamic_color(text)
+        draw_fixed(text, HEALTH_X, y, HEALTH_W, size=16, color=color)
 
-    health_y = [
-        205,
-        255,
-        305,
-        355,
-        405,
-        455,
-        505,
-    ]
-
-    for text, y in zip(health_values, health_y):
-        draw_value(
-            draw,
-            text,
-            HEALTH_X * sx,
-            y * sy,
-            HEALTH_W * sx,
-            size=15,
-        )
-
-    # --------------------------------------------------------
-    # ACTION
-    # --------------------------------------------------------
-    action_y = 690
-
-    for action in actions[:5]:
-        draw_value(
-            draw,
+    # ---------------- ACTION ----------------
+    action_y = 674
+    for action in actions[:4]:
+        draw_fixed(
             "• " + action,
-            ACTION_X * sx,
-            action_y * sy,
-            ACTION_W * sx,
-            size=16,
+            1110,
+            action_y,
+            360,
+            size=17,
             color=GREEN if action == "No action required" else RED,
         )
-        action_y += 34
+        action_y += 31
 
-    safe = re.sub(
-        r"[^A-Za-z0-9._-]+",
-        "_",
-        str(site_id).upper(),
-    )
-
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", str(site_id).upper())
     output = f"output_area_{safe}.png"
     img.save(output, format="PNG", dpi=(150, 150))
-
     return output
-
 
 def register_area_handler(bot):
     @bot.message_handler(commands=["area"])
