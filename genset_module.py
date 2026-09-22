@@ -21,7 +21,7 @@ EXCEL_CANDIDATES = [
 ]
 
 MOCKUP_CANDIDATES = [
-    "Mokupgenset.png",
+    "Mokupgensetnew.png",
     "MokupGenset.png",
     "mokupgenset.png",
 ]
