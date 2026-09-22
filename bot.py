@@ -12,10 +12,9 @@ bot = telebot.TeleBot(TOKEN)
 
 EXCEL_CANDIDATES = ["Excel_master(1).xlsx", "Excel_master.xlsx"]
 MOCKUP_CANDIDATES = [
-    # Power template: allow explicit override first.
+    # EXACT template requested by user. Never replace/recreate the layout.
     "mokup2.png",
 ]
-
 # Power v5 uses the current 10-row mockup exactly.
 BASE_W = 1683
 BASE_H = 935
@@ -330,53 +329,109 @@ def build_actions(row):
     return unique
 
 
+
+
+def shorten_text_fixed(draw, text, max_width, font):
+    """Single-line ellipsis without changing font size."""
+    text = str(text)
+    if draw.textbbox((0, 0), text, font=font)[2] <= max_width:
+        return text
+    suffix = "..."
+    lo, hi = 0, len(text)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        candidate = text[:mid].rstrip() + suffix
+        if draw.textbbox((0, 0), candidate, font=font)[2] <= max_width:
+            lo = mid
+        else:
+            hi = mid - 1
+    return text[:lo].rstrip() + suffix
 def generate_site_card(site_id):
+    """Render /site on the CLEAN blank Power mockup.
+
+    IMPORTANT:
+    - The template already contains labels, icons, separators and colons.
+    - Python draws VALUES only.
+    - Every value has one locked X coordinate per panel.
+    - Values are strictly single-line; they never wrap or move vertically.
+    - Font is kept large; if a value is too long it is truncated with ... .
+    """
     row = load_site(site_id)
     if row is None:
         return None
 
     mockup_path = find_existing(MOCKUP_CANDIDATES)
     if not mockup_path:
-        raise FileNotFoundError("Mockup template tidak ditemukan.")
+        raise FileNotFoundError("Mockup Power tidak ditemukan. Pastikan mokup2.png ada.")
 
     img = Image.open(mockup_path).convert("RGB")
     sx = img.width / BASE_W
     sy = img.height / BASE_H
+    scale = min(sx, sy)
     draw = ImageDraw.Draw(img)
 
     def xy(x, y):
         return round(x * sx), round(y * sy)
 
-    def write_value(text, x, y, max_width, size=21, color=None, bold=True):
-        text = display_value(text)
-        font = fit_font(
-            draw, text, round(max_width * sx),
-            size=round(size * min(sx, sy)), minimum=10, bold=bold
-        )
+    def one_line_fit(text, max_width, size=19, minimum=17, bold=True):
+        """Keep the requested large font. Never wrap and never go tiny."""
+        text = display_value(text, "")
+        if not text:
+            return "", get_font(round(size * scale), bold=bold)
+
+        font = get_font(round(size * scale), bold=bold)
+        if draw.textbbox((0, 0), text, font=font)[2] <= max_width:
+            return text, font
+
+        # Do NOT reduce the font below minimum. Truncate instead.
+        font = get_font(round(minimum * scale), bold=bold)
+        return shorten_text_fixed(draw, text, max_width, font), font
+
+    def write_value(text, x, y, width, size=19, minimum=17, color=NAVY, bold=True):
+        pixel_width = round(width * sx)
+        text, font = one_line_fit(text, pixel_width, size=size, minimum=minimum, bold=bold)
+        if not text:
+            return
         draw.text(
-            xy(x, y), text, font=font,
-            fill=color if color is not None else dynamic_color(text),
+            xy(x, y),
+            text,
+            font=font,
+            fill=color,
             anchor="lm",
         )
 
-    # =========================================================
-    # LOCKED VALUE COLUMNS
-    # Semua value dimulai pada X tetap setelah separator ":".
-    # Jangan memakai X berbeda per label.
-    # =========================================================
-    SITE_X = 304
-    SITE_W = 165
-    MID_X = 843
-    MID_W = 225
-    HEALTH_X = 1404
-    HEALTH_W = 225
+    def write_action(text, x, y, width, color=RED):
+        text = display_value(text, "")
+        if not text:
+            return
+        pixel_width = round(width * sx)
+        font = get_font(round(17 * scale), bold=True)
+        # Action may use up to 2 lines, but all normal data fields remain one-line.
+        lines = wrap_text(draw, f"• {text}", font, pixel_width, max_lines=2)
+        line_h = draw.textbbox((0, 0), "Ag", font=font)[3] - draw.textbbox((0, 0), "Ag", font=font)[1]
+        py = round(y * sy)
+        for line in lines:
+            draw.text((round(x * sx), py), line, font=font, fill=color, anchor="la")
+            py += line_h + round(3 * sy)
+        return len(lines)
 
-    # -------------------------
-    # SITE INFO
-    # -------------------------
-    # Template power saat ini memakai 8 row Site Info.
-    # Jika template 10-row (Class Site + VIP) dipasang, kedua row
-    # tambahan otomatis diisi tanpa menggeser row lain.
+    # ---------------------------------------------------------
+    # FIXED X COORDINATES - aligned to the CLEAN mockup colons
+    # ---------------------------------------------------------
+    # Site Info colon is around x=274 -> value starts x=302.
+    # Middle panels colon is around x=791 -> value starts x=825.
+    # Healthy Check colon is around x=1390 -> value starts x=1404.
+    # These X values NEVER depend on label length.
+    SITE_X = 301
+    SITE_W = 168
+    MID_X = 814
+    MID_W = 245
+    HEALTH_X = 1411
+    HEALTH_W = 218
+
+    # ---------------------------------------------------------
+    # SITE INFO - 10 fixed rows
+    # ---------------------------------------------------------
     site_rows = [
         value(row, "Site ID"),
         value(row, "Site Name"),
@@ -389,28 +444,19 @@ def generate_site_card(site_id):
         value(row, "VIP"),
         f"{value(row, 'Lat')} / {value(row, 'Long')}",
     ]
-
-    # Layout is selected explicitly. This avoids painting Class/VIP onto an
-    # older 8-row template. Set POWER_SITE_ROWS=10 when using the new mockup.
-    site_rows_mode = os.getenv("POWER_SITE_ROWS", "10").strip()
-    if site_rows_mode == "10":
-        site_y = [230, 286, 342, 398, 454, 510, 566, 622, 678, 734]
-    else:
-        site_rows = site_rows[:8]
-        site_y = [230, 286, 343, 400, 457, 514, 571, 628]
+    site_y = [230, 286, 342, 398, 454, 510, 566, 622, 678, 734]
 
     for i, (text, y) in enumerate(zip(site_rows, site_y)):
+        # Normal fields stay large. Only Lat/Long gets a controlled smaller
+        # size because the value is inherently long and must remain complete.
         if i == 9:
-            size = 15
-        elif i in (1, 7, 8):
-            size = 18
+            write_value(text, SITE_X, y, SITE_W, size=14, minimum=13, color=NAVY)
         else:
-            size = 19
-        write_value(text, SITE_X, y, SITE_W, size=size, color=NAVY)
+            write_value(text, SITE_X, y, SITE_W, size=20, minimum=19, color=NAVY)
 
-    # -------------------------
-    # RECTIFIER & PLN
-    # -------------------------
+    # ---------------------------------------------------------
+    # RECTIFIER & PLN - 7 fixed rows
+    # ---------------------------------------------------------
     rect_rows = [
         value(row, "ID PLN"),
         f"{value(row, 'Daya PLN (KVA)')} kVA",
@@ -420,12 +466,13 @@ def generate_site_card(site_id):
         value(row, "Inserted Module Qty (1)"),
         value(row, "Load System (1)"),
     ]
-    for text, y in zip(rect_rows, [216, 263, 310, 357, 404, 451, 498]):
-        write_value(text, MID_X, y, MID_W, size=18)
+    rect_y = [216, 263, 310, 357, 404, 451, 498]
+    for text, y in zip(rect_rows, rect_y):
+        write_value(text, MID_X, y, MID_W, size=19, minimum=18)
 
-    # -------------------------
-    # BATTERY STATUS
-    # -------------------------
+    # ---------------------------------------------------------
+    # BATTERY STATUS - 6 fixed rows
+    # ---------------------------------------------------------
     bbt = safe_float(row["BBT H (1)"]) if "BBT H (1)" in row.index else None
     batt_rows = [
         value(row, "Battery Brand (1)"),
@@ -435,12 +482,13 @@ def generate_site_card(site_id):
         f"{bbt:.2f} Hours" if bbt is not None else "-",
         value(row, "BBT Category (1)"),
     ]
-    for text, y in zip(batt_rows, [624, 669, 713, 758, 802, 846]):
-        write_value(text, MID_X, y, MID_W, size=17)
+    batt_y = [607, 651, 695, 739, 783, 827]
+    for text, y in zip(batt_rows, batt_y):
+        write_value(text, MID_X, y, MID_W, size=19, minimum=18)
 
-    # -------------------------
-    # HEALTHY CHECK
-    # -------------------------
+    # ---------------------------------------------------------
+    # HEALTHY CHECK - 8 fixed rows
+    # ---------------------------------------------------------
     utility = safe_float(row["Rectifier Utility"]) if "Rectifier Utility" in row.index else None
     utility_text = f"{utility * 100:.1f} %" if utility is not None else "-"
 
@@ -462,14 +510,17 @@ def generate_site_card(site_id):
     ]
     health_y = [216, 264, 311, 359, 406, 454, 501, 548]
     for idx, (text, y) in enumerate(zip(health_values, health_y)):
-        if idx == 1:
-            write_value(text, HEALTH_X, y, HEALTH_W, size=16, color=utility_color(utility))
+        color = utility_color(utility) if idx == 1 else dynamic_color(text)
+        # PLN voltage is a fixed 3-phase string; keep it on one line and
+        # only reduce this one field enough to show the complete value.
+        if idx == 4:
+            write_value(text, HEALTH_X, y, HEALTH_W, size=15, minimum=14, color=color)
         else:
-            write_value(text, HEALTH_X, y, HEALTH_W, size=16)
+            write_value(text, HEALTH_X, y, HEALTH_W, size=17, minimum=16, color=color)
 
-    # -------------------------
+    # ---------------------------------------------------------
     # ACTION
-    # -------------------------
+    # ---------------------------------------------------------
     actions = build_actions(row)
     if not actions:
         actions = ["No action required"]
@@ -477,24 +528,12 @@ def generate_site_card(site_id):
     else:
         action_color = RED
 
-    action_x = round(1220 * sx)
-    action_y = round(733 * sy)
-    action_w = round(365 * sx)
-    for action in actions[:4]:
-        action_font = fit_font(
-            draw, f"• {action}", action_w, size=17, minimum=12, bold=True
-        )
-        lines = wrap_text(draw, f"• {action}", action_font, action_w, max_lines=2)
-        bbox = draw.textbbox((0, 0), "Ag", font=action_font)
-        line_h = bbox[3] - bbox[1]
-        for line in lines:
-            draw.text((action_x, action_y), line, font=action_font, fill=action_color, anchor="la")
-            action_y += line_h + 3
-        action_y += 6
-        if action_y > round(825 * sy):
+    action_y = 733
+    for action in actions[:3]:
+        used = write_action(action, 1218, action_y, 365, color=action_color)
+        action_y += 34 if used else 30
+        if action_y > 820:
             break
-
-    # Intentionally no "Data Update / Last Check" footer text.
 
     output_path = f"output_{clean_filename(site_id)}.png"
     img.save(output_path, format="PNG", dpi=(150, 150))
@@ -566,6 +605,12 @@ def handle_site(message):
 from genset_module import register_genset_handler
 register_genset_handler(bot)
 
+try:
+    from area_module import register_area_handler
+    register_area_handler(bot)
+except Exception as _area_exc:
+    print(f"Area module tidak diaktifkan: {_area_exc}")
+
 print("Bot Telegram siap dijalankan...")
-print("Commands aktif: /site <Site_ID> dan /genset <Site_ID>")
+print("Commands aktif: /site <Site_ID> | /genset <Site_ID> | /area <Site_ID>")
 bot.infinity_polling(skip_pending=True)
