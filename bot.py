@@ -13,15 +13,9 @@ bot = telebot.TeleBot(TOKEN)
 EXCEL_CANDIDATES = ["Excel_master(1).xlsx", "Excel_master.xlsx"]
 MOCKUP_CANDIDATES = [
     # Power template: allow explicit override first.
-    "power_mockup_latest.png",
-    "MokupPowerAction.png",
+    "mokupgensetnew.png",
+    "mokuppower.png",
     "power_mockup.png",
-    "wide_clean_infographic_dashboard_ui_mockup_on_a_l.png",
-    "Mokupnew.png",
-    "Mokup(1).png", "Mokup.png", "mokup.png", "mokup(1).png",
-    "wide_clean_infographic_dashboard_ui_image_in_a_fla.png",
-    "a_clean_flat_vector_infographic_dashboard_templat.png",
-    "Blank Telkomsel Huawei Dashboard Template.png"
 ]
 
 # Power v5 uses the current 10-row mockup exactly.
