@@ -658,9 +658,21 @@ def register_power_handler(bot):
 
 register_power_handler(bot)
 
+# Genset handler — restored. This is isolated from /site and does not change
+# the Power renderer, mockup, coordinates, fonts, or Excel mapping.
+try:
+    from genset_module import register_genset_handler
+    register_genset_handler(bot)
+except ImportError as exc:
+    raise RuntimeError(
+        "genset_module.py tidak ditemukan. Upload file genset_module.py bersama bot.py."
+    ) from exc
+
 if __name__ == "__main__":
     print("Bot Telegram siap dijalankan...")
+    print("Commands aktif: /site <Site_ID> dan /genset <Site_ID>")
     bot.infinity_polling(
         skip_pending=True,
         allowed_updates=["message"],
     )
+
