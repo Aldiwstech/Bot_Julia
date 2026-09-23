@@ -3,6 +3,14 @@ import re
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 
+TOKEN = os.getenv("TOKEN")
+if not TOKEN:
+    raise ValueError("Token belum diset di Environment Variables Railway!")
+
+bot = telebot.TeleBot(TOKEN)
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # ============================================================
 # POWER MODULE - PRECISION V2
 # ============================================================
