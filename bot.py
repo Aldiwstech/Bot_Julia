@@ -3,6 +3,22 @@ import re
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 
+# PyTelegramBotAPI
+try:
+    import telebot
+except ImportError as exc:
+    raise RuntimeError(
+        "PyTelegramBotAPI belum terinstall. Tambahkan pyTelegramBotAPI ke requirements.txt."
+    ) from exc
+import pandas as pd
+from PIL import Image, ImageDraw, ImageFont
+
+TOKEN = os.getenv("TOKEN")
+if not TOKEN:
+    raise ValueError("Token belum diset di Environment Variables Railway!")
+
+bot = telebot.TeleBot(TOKEN, parse_mode=None)
+
 # ============================================================
 # POWER MODULE - PRECISION V2
 # ============================================================
