@@ -125,7 +125,22 @@ def load_site(site_id):
     if not excel_path:
         raise FileNotFoundError("Excel_master.xlsx tidak ditemukan.")
 
-    df = pd.read_excel(excel_path, sheet_name="Rectifire&battery")
+    # Excel yang dipakai di deployment bisa memakai kapitalisasi nama sheet
+    # yang berbeda: Rectifire&Battery / Rectifire&battery.
+    # Pilih sheet secara case-insensitive agar tidak gagal hanya karena huruf besar-kecil.
+    workbook = pd.ExcelFile(excel_path)
+    wanted_sheet = "rectifire&battery"
+    sheet_name = next(
+        (name for name in workbook.sheet_names if str(name).strip().lower() == wanted_sheet),
+        None,
+    )
+    if sheet_name is None:
+        raise KeyError(
+            "Sheet Rectifire&Battery tidak ditemukan. Sheet tersedia: "
+            + ", ".join(map(str, workbook.sheet_names))
+        )
+
+    df = pd.read_excel(workbook, sheet_name=sheet_name)
     if "Site ID" not in df.columns:
         raise KeyError("Kolom 'Site ID' tidak ditemukan.")
 
