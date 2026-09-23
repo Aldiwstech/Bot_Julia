@@ -647,10 +647,20 @@ def register_power_handler(bot):
                 )
 
 
+
+# ============================================================
+# TELEGRAM STARTUP
+# ------------------------------------------------------------
+# FIX ONLY: register /site and start polling.
+# Tidak mengubah mockup, koordinat, font, layout, Excel mapping,
+# warna, atau isi report.
+# ============================================================
+
+register_power_handler(bot)
+
 if __name__ == "__main__":
-    # Simple local test:
-    #   python power_module_precision.py CBN234
-    import sys
-    if len(sys.argv) > 1:
-        result = generate_site_card(sys.argv[1])
-        print(result or "SITE_NOT_FOUND")
+    print("Bot Telegram siap dijalankan...")
+    bot.infinity_polling(
+        skip_pending=True,
+        allowed_updates=["message"],
+    )
