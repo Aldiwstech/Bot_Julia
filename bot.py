@@ -13,7 +13,7 @@ bot = telebot.TeleBot(TOKEN)
 EXCEL_CANDIDATES = ["Excel_master(1).xlsx", "Excel_master.xlsx"]
 MOCKUP_CANDIDATES = [
     # Power template: allow explicit override first.
-    "power2.png",
+    "mokup2.png",
 ]
 
 # Power v5 uses the current 10-row mockup exactly.
