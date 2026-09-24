@@ -25,7 +25,7 @@ bot = telebot.TeleBot(TOKEN, parse_mode=None)
 # /site only. Genset and Area are NOT touched by this module.
 #
 # Source:
-#   Excel_master(1).xlsx / Excel_master.xlsx
+#   Excel_master(1).xlsx / Excel_Master.xlsx
 #   sheet: Rectifire&Battery
 #
 # Mockup:
