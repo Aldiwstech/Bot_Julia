@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 EXCEL_CANDIDATES = [
     "Excel_master(1).xlsx",
-    "Excel_master.xlsx",
+    "Excel_Master.xlsx",
 ]
 
 MOCKUP_CANDIDATES = [
